@@ -1,0 +1,2 @@
+CodeBLEU Result:
+{'codebleu': 0.2769070462119427, 'ngram_match_score': 0.1537054206312675, 'weighted_ngram_match_score': 0.24881440508337618, 'syntax_match_score': 0.3235294117647059, 'dataflow_match_score': 0.3815789473684211}

@@ -1,0 +1,1838 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to summarize the entire codebase provided below so that other developers may use it when adding more functions to this codebase. Please ensure that it is a detailed summary and includes the following details:
+
+1. A high-level overview of the main functionalities offered by the codebase, highlighting key modules or components.
+2. A breakdown of important functions and what specific tasks or executions they handle.
+3. Identify any external dependencies, libraries, or frameworks the code relies on, and describe how they are integrated into the codebase.
+4. Describe the overall structure of the codebase (e.g., how files are organized, major classes or modules).
+5. Explain any relationships or interactions between different modules or components, such as how data flows between them. 
+
+Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/deleteCloudFormationStack.test.ts
+```TS
+import { index, ValidationError } from "./deleteCloudFormationStack";
+import { logger } from "../logger";
+import { deleteStack } from "../cloudformation";
+
+let dynamoDBStreamEvent: any;
+
+describe("deleteCloudFormationStack", () => {
+  beforeEach(() => {
+    (<any>deleteStack) = jest.fn();
+    logger.error = jest.fn();
+    dynamoDBStreamEvent = {
+      Records: [
+        {
+          eventID: "89a6db8b5fa9b0df5b67e2a6fd24cb76",
+          eventName: "REMOVE",
+          dynamodb: {
+            Keys: {
+              stackId: {
+                S: "arn:aws:cloudformation:ap-southeast-2:account-id:stack/stack-name/id",
+              },
+              stackName: {
+                S: "stackname",
+              },
+            },
+            OldImage: {
+              expirationTime: {
+                N: "1596090125",
+              },
+              stackId: {
+                S: "arn:aws:cloudformation:ap-southeast-2:account-id:stack/stack-name/id",
+              },
+              stackName: {
+                S: "stackname",
+              },
+              tags: {
+                S: '[{"value":"your-app-name","key":"APP_NAME"},{"value":"4018","key":"BUILD_NUMBER"},{"value":"enabled","key":"stackjanitor"}]',
+              },
+              deleteCount: {
+                N: "0",
+              },
+            },
+            StreamViewType: "NEW_AND_OLD_IMAGES",
+          },
+        },
+      ],
+      v: 1,
+    };
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+    jest.resetModules();
+  });
+  test("it should invoke cloudformation delete for remove event", async () => {
+    await index(dynamoDBStreamEvent);
+    expect(deleteStack).toHaveBeenNthCalledWith(1, "stackname");
+  });
+
+  test("Validation error should be logged safely", async () => {
+    (<any>deleteStack) = jest.fn().mockImplementation(() => {
+      throw new ValidationError("Stack with id stackname does not exist");
+    });
+
+    await index(dynamoDBStreamEvent);
+
+    expect(deleteStack).toHaveBeenNthCalledWith(1, "stackname");
+
+    expect(logger.error).toHaveBeenNthCalledWith(
+      1,
+      {
+        eventID: "89a6db8b5fa9b0df5b67e2a6fd24cb76",
+        eventName: "REMOVE",
+        stackInfo: {
+          expirationTime: 1596090125,
+          stackId:
+            "arn:aws:cloudformation:ap-southeast-2:account-id:stack/stack-name/id",
+          stackName: "stackname",
+          tags: '[{"value":"your-app-name","key":"APP_NAME"},{"value":"4018","key":"BUILD_NUMBER"},{"value":"enabled","key":"stackjanitor"}]',
+          deleteCount: 0,
+        },
+      },
+      "Stack with id stackname does not exist",
+    );
+  });
+});
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/gitHook.test.ts
+```TS
+import {
+  bitBucketEventHandler,
+  bitbucketEventParser,
+  isBitbucketEvent,
+  isInDesiredState,
+} from "./gitHook";
+import * as helpers from "../helpers";
+jest.mock("../helpers");
+
+beforeEach(() => {
+  jest.resetAllMocks();
+});
+
+const bitbucketEvent = {
+  pullrequest: {
+    type: "pullrequest",
+    source: {
+      repository: {
+        type: "repository",
+        name: "test-repo",
+        full_name: "lendi-dev/test-repo",
+      },
+      branch: {
+        name: "feature/FUNNEL-1525-1",
+      },
+    },
+    state: "DECLINED",
+    reason: "TEST",
+  },
+  repository: {
+    full_name: "lendi-dev/test-repo",
+    type: "repository",
+    name: "test-repo",
+  },
+};
+
+describe("isInDesiredState", () => {
+  test("it should return true for Merged State", () => {
+    const state = "MERGED";
+    expect(isInDesiredState(state)).toEqual(true);
+  });
+  test("it should return true for Declined State", () => {
+    const state = "DECLINED";
+    expect(isInDesiredState(state)).toEqual(true);
+  });
+  test("it should return false for Created State", () => {
+    const state = "CREATED";
+    expect(isInDesiredState(state)).toEqual(false);
+  });
+});
+
+describe("bitbucketEventParser", () => {
+  test("it should return true for Merged State", () => {
+    const bitBucketEventData = {
+      pullrequest: {
+        destination: {
+          repository: {
+            name: "test-webhook",
+            full_name: "khaledquadir/test-webhook",
+          },
+          branch: {
+            name: "master",
+          },
+        },
+        source: {
+          repository: {
+            name: "test-webhook",
+            full_name: "khaledquadir/test-webhook",
+          },
+          branch: {
+            name: "test-hook-12",
+          },
+        },
+        state: "MERGED",
+      },
+      repository: {
+        name: "test-webhook",
+      },
+    };
+    expect(bitbucketEventParser(bitBucketEventData)).toEqual({
+      repository: "test-webhook",
+      branch: "test-hook-12",
+    });
+  });
+});
+
+describe("isBitbucketEvent", () => {
+  test("it should return true bitbucket event", () => {
+    const bitBucketEventData = {
+      pullrequest: {},
+      repository: {},
+    };
+    expect(isBitbucketEvent(bitBucketEventData)).toEqual(true);
+  });
+});
+
+describe("bitBucketEventHandler", () => {
+  test("it should return success response for bitbucket merged PR", () => {
+    const bitBucketEventData = {
+      pullrequest: {
+        destination: {
+          repository: {
+            name: "test-webhook",
+            full_name: "khaledquadir/test-webhook",
+          },
+          branch: {
+            name: "master",
+          },
+        },
+        source: {
+          repository: {
+            name: "test-webhook",
+            full_name: "khaledquadir/test-webhook",
+          },
+          branch: {
+            name: "test-hook-12",
+          },
+        },
+        state: "MERGED",
+      },
+      repository: {
+        name: "test-webhook",
+      },
+    };
+
+    const spy = jest.spyOn(helpers, "findStacksFromTag");
+    spy.mockResolvedValue([
+      {
+        stackName: "CloudJanitorTestV1",
+        stackId:
+          "arn:aws:cloudformation:ap-southeast-2:12345:stack/CloudJanitorTestV1/f79269a0",
+      },
+    ]);
+
+    expect(bitBucketEventHandler(bitBucketEventData)).toEqual(
+      Promise.resolve({}),
+    );
+  });
+
+  test("should delete stack for bitbucket webhook call", async () => {
+    const deleteDynamoRow = jest.spyOn(helpers, "deleteDynamoRow");
+
+    jest.spyOn(helpers, "findStacksFromTag").mockResolvedValue([
+      {
+        stackName: "stackname",
+        stackId:
+          "arn:aws:cloudformation:ap-southeast-2:12345:stack/CloudJanitorTestV1/f79269a0",
+      },
+    ]);
+
+    await bitBucketEventHandler(bitbucketEvent);
+
+    expect(deleteDynamoRow).toHaveBeenNthCalledWith(1, {
+      stackId:
+        "arn:aws:cloudformation:ap-southeast-2:12345:stack/CloudJanitorTestV1/f79269a0",
+      stackName: "stackname",
+    });
+  });
+});
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/gitHook.ts
+```TS
+import { APIGatewayEvent } from "aws-lambda";
+import {
+  BitbucketWebhookEvent,
+  DataItem,
+  GithubWebhookEvent,
+  GitTag,
+  State,
+} from "stackjanitor";
+import { logger } from "../logger";
+import { deleteDynamoRow, findStacksFromTag } from "../helpers";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+
+export const SEARCH_KEY = "tags";
+
+export enum Response {
+  Ignore = "Ignored as PR is not in Merged or Declined state",
+  Success = "Request processed",
+}
+
+export const bitbucketEventParser = (
+  eventData: BitbucketWebhookEvent,
+): GitTag => ({
+  repository: eventData.pullrequest.source.repository.name,
+  branch: eventData.pullrequest.source.branch.name,
+});
+
+export const gitHubEventParser = (eventData: GithubWebhookEvent): GitTag => ({
+  repository: eventData.repository.name,
+  branch: eventData.pull_request.head.ref,
+});
+
+export const isBitbucketEvent = (event: any): event is BitbucketWebhookEvent =>
+  event.hasOwnProperty("pullrequest") && event.hasOwnProperty("repository");
+
+export const isGithubEvent = (event: any): event is GithubWebhookEvent =>
+  event.hasOwnProperty("pull_request") && event.hasOwnProperty("repository");
+
+export const bitBucketEventHandler = async (
+  eventData: BitbucketWebhookEvent,
+) => {
+  const state = eventData.pullrequest.state;
+  const inDesiredState = isInDesiredState(state);
+  if (!inDesiredState)
+    return {
+      statusCode: 200,
+      body: Response.Ignore,
+    };
+  const gitTag = bitbucketEventParser(eventData);
+  logger.info(
+    { gitTag },
+    `Processing BitBucket webhook for branch ${gitTag.branch} in repository ${gitTag.repository}`,
+  );
+  return findAndDeleteStacksFromTag(gitTag);
+};
+
+export const gitHubEventHandler = async (eventData: GithubWebhookEvent) => {
+  const mergedState = eventData.pull_request.merged;
+  if (!mergedState)
+    return {
+      statusCode: 200,
+      body: Response.Ignore,
+    };
+  const gitTag = gitHubEventParser(eventData);
+  logger.info(
+    { gitTag },
+    `Processing GitHub webhook for branch ${gitTag.branch} \
+              in repository ${gitTag.repository}`,
+  );
+  return findAndDeleteStacksFromTag(gitTag);
+};
+
+export const findAndDeleteStacksFromTag = async (gitTag: GitTag) => {
+  const stacksFromTag = await findStacksFromTag(gitTag, SEARCH_KEY);
+  return deleteStacks(stacksFromTag);
+};
+
+export const deleteStacks = async (stacks: DataItem[]) => {
+  for (let stack of stacks) {
+    try {
+      await deleteDynamoRow(stack);
+    } catch (e: any) {
+      logger.error(
+        {
+          stackInfo: stack,
+          stack: e.stack,
+        },
+        e.message,
+      );
+    }
+  }
+  return {
+    statusCode: 200,
+    body: Response.Success,
+  };
+};
+
+export const isInDesiredState = (state: State) =>
+  state === State.Merged ? true : state === State.Declined;
+
+export const index = async (event: APIGatewayEvent) => {
+  if (!event.body) {
+    return {
+      statusCode: 200,
+      body: Response.Ignore,
+    };
+  }
+
+  const eventData = JSON.parse(event.body);
+  if (process.env.EXTERNAL_LAMBDA) {
+    const externalLambda = process.env.EXTERNAL_LAMBDA;
+    logger.info({
+      externalLambda,
+    });
+    const lambda = new LambdaClient();
+    const params = new InvokeCommand({
+      FunctionName: externalLambda,
+      InvocationType: "Event",
+      Payload: event.body,
+    });
+    try {
+      await lambda.send(params);
+    } catch (e: any) {
+      // log only and continue the invocation
+      logger.error(e);
+    }
+  }
+
+  if (isBitbucketEvent(eventData)) {
+    return await bitBucketEventHandler(eventData);
+  }
+  if (isGithubEvent(eventData)) {
+    return await gitHubEventHandler(eventData);
+  }
+
+  return {
+    statusCode: 200,
+    body: Response.Ignore,
+  };
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/monitorCloudFormationStack.ts
+```TS
+import config from "../config";
+import {
+  CloudFormationEvent,
+  DataItem,
+  DeleteItem,
+  StackJanitorStatus,
+} from "stackjanitor";
+import { logger } from "../logger";
+import { Actions, JanitorRecord } from "../data/DynamoDataModel";
+import { Entity } from "dynamodb-toolbox";
+import { getStackArn } from "../cloudformation";
+
+export enum RequestType {
+  Create = "CreateStack",
+  Update = "UpdateStack",
+  Delete = "DeleteStack",
+}
+
+export enum MonitoringResultStatus {
+  Success = "success",
+  Ignore = "ignore",
+}
+
+export const getExpirationTime = (eventTime: string): number =>
+  new Date(eventTime).getTime() / 1000 +
+  Number(config.DEFAULT_EXPIRATION_PERIOD);
+
+export const generateItemFromEvent = (event: CloudFormationEvent): DataItem => {
+  const expirationTime = getExpirationTime(event.detail.eventTime);
+  return {
+    stackName: event.detail.requestParameters.stackName,
+    stackId: event.detail.responseElements?.stackId,
+    expirationTime: expirationTime,
+    tags: JSON.stringify(event.detail.requestParameters.tags),
+    deleteCount: 0,
+  };
+};
+
+// Takes the old DataItem and creates a new one as a retry
+export const generateRepeatedDeleteItem = (oldItem: DataItem): DataItem => {
+  const deleteCount = oldItem.deleteCount ? oldItem.deleteCount + 1 : 1;
+  const newExpiration =
+    Math.floor(new Date().getTime() / 1000) +
+    config.DELETE_INTERVAL * deleteCount;
+  return {
+    stackName: oldItem.stackName,
+    stackId: oldItem.stackId,
+    expirationTime: newExpiration,
+    tags: oldItem.tags,
+    deleteCount,
+  };
+};
+
+export const generateDeleteItem = async (
+  event: CloudFormationEvent,
+): Promise<DeleteItem> => {
+  let stackName: string;
+  let stackId: string | undefined;
+
+  if (event.detail.eventName === RequestType.Delete) {
+    logger.info(`matched eventName ${RequestType.Delete}`);
+    // matches "arn:aws:cloudformation:ap-southeast-2:01234567890:stack/dna-ml-poc-teddy/fe4b14b0-b0fa-11ee-901a-02e779f78083"
+    if (event.detail.requestParameters.stackName.startsWith("arn")) {
+      stackName = event.detail.requestParameters.stackName.split("/")[1];
+      stackId = event.detail.requestParameters.stackName;
+      // tricky else block where the DeleteStack is called but no ARN is in the stackId
+    } else {
+      stackName = event.detail.requestParameters.stackName;
+      stackId = await getStackArn(stackName);
+    }
+    // when not delete event, should have the stackId in the event body
+  } else {
+    stackName = event.detail.requestParameters.stackName;
+    stackId = event.detail.responseElements?.stackId;
+  }
+
+  return {
+    stackName,
+    stackId,
+  };
+};
+
+export const handleDataItem = async (
+  item: DataItem | DeleteItem,
+  handler: Entity,
+  action: Actions,
+) => {
+  try {
+    switch (action) {
+      case Actions.Create:
+        await handler.put(item);
+        break;
+      case Actions.Destroy:
+        if (!item.stackId) {
+          logger.info(item, "No stackId to destroy, exiting early");
+          break;
+        }
+        await handler.delete(item);
+        break;
+      case Actions.Get:
+        await handler.get(item);
+        break;
+      case Actions.Update:
+        await handler.update(item);
+        break;
+      default:
+        throw new Error(`Unmatched action: ${action}`);
+    }
+    return MonitoringResultStatus.Success;
+  } catch (e: any) {
+    logger.error(
+      {
+        stackInfo: item,
+        stack: e.stack,
+      },
+      e.message,
+    );
+    return MonitoringResultStatus.Ignore;
+  }
+};
+
+export const monitorCloudFormationStack = async (
+  event: CloudFormationEvent,
+  dataMapper: Entity,
+) => {
+  switch (event.detail.eventName) {
+    case RequestType.Create:
+      const inputItem = generateItemFromEvent(event);
+      return handleDataItem(inputItem, dataMapper, Actions.Create);
+
+    case RequestType.Update:
+      const updateItem = generateItemFromEvent(event);
+      return handleDataItem(updateItem, dataMapper, Actions.Update);
+
+    case RequestType.Delete:
+      const deleteItem = await generateDeleteItem(event);
+      return handleDataItem(deleteItem, dataMapper, Actions.Destroy);
+
+    default:
+      return MonitoringResultStatus.Ignore;
+  }
+};
+
+export const index = async (stackJanitorStatus: StackJanitorStatus) => {
+  const { event } = stackJanitorStatus;
+  return await monitorCloudFormationStack(event, JanitorRecord);
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/monitorCloudFormationStack.test.ts
+```TS
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import {
+  generateDeleteItem,
+  generateItemFromEvent,
+  getExpirationTime,
+  monitorCloudFormationStack,
+  MonitoringResultStatus,
+} from "./monitorCloudFormationStack";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { Entity, Table } from "dynamodb-toolbox";
+
+describe("monitorCloudFormationStack:generateDeleteItem", () => {
+  test("it should return correct format for deleteStack event", async () => {
+    const event = {
+      detail: {
+        userIdentity: {
+          userName: "jordan.simonovski",
+        },
+        eventTime: "2019-07-21T22:41:21Z",
+        eventName: "DeleteStack",
+        requestParameters: {
+          stackName:
+            "arn:aws:cloudformation:ap-southeast-2:12345:stack/log-archive-management/16921510-a9e8-11e9-a24e-02d286d7265a",
+        },
+        responseElements: null,
+      },
+    };
+    expect(await generateDeleteItem(event)).toStrictEqual({
+      stackName: "log-archive-management",
+      stackId:
+        "arn:aws:cloudformation:ap-southeast-2:12345:stack/log-archive-management/16921510-a9e8-11e9-a24e-02d286d7265a",
+    });
+  });
+
+  test("it should return correct format for deleteStack event", async () => {
+    const event = {
+      detail: {
+        userIdentity: {
+          userName: "test_user",
+        },
+        eventTime: "2019-07-21T22:41:21Z",
+        eventName: "UpdateStack",
+        requestParameters: {
+          stackName: "product-api-latest-development",
+        },
+        responseElements: {
+          stackId:
+            "arn:aws:cloudformation:ap-southeast-2:12345:stack/product-api-latest-development/8c0e2370-b9a5-11e9-abf5-02afb887c468",
+        },
+      },
+    };
+    expect(await generateDeleteItem(event)).toStrictEqual({
+      stackName: "product-api-latest-development",
+      stackId:
+        "arn:aws:cloudformation:ap-southeast-2:12345:stack/product-api-latest-development/8c0e2370-b9a5-11e9-abf5-02afb887c468",
+    });
+  });
+});
+
+describe("monitorCloudFormationStack:getExpirationTime", () => {
+  test("it should return correct expired EPOCH", () => {
+    const eventTime = "2019-08-09T01:35:55Z";
+    const expectedExpirationEpoch = 1565919355;
+
+    expect(getExpirationTime(eventTime)).toEqual(expectedExpirationEpoch);
+  });
+});
+
+describe("monitorCloudFormationStack:generateItemFromEvent", () => {
+  test("it should return correct item format from CloudFormation event", () => {
+    const event = {
+      time: "2019-08-09T01:56:24Z",
+      detail: {
+        userIdentity: {
+          sessionContext: {
+            sessionIssuer: {
+              userName: "development-poweruser",
+            },
+          },
+        },
+        eventTime: "2019-08-09T01:56:24Z",
+        eventName: "CreateStack",
+
+        requestParameters: {
+          tags: [
+            {
+              value: "enabled",
+              key: "stackjanitor",
+            },
+            {
+              value: "1",
+              key: "v1",
+            },
+          ],
+          stackName: "CloudJanitorTest",
+        },
+        responseElements: {
+          stackId:
+            "arn:aws:cloudformation:ap-southeast-2:12345:stack/CloudJanitorTest/e46581a0-ba48-11e9-a48c-0a4631dffc70",
+        },
+      },
+    };
+    expect(generateItemFromEvent(event)).toEqual({
+      deleteCount: 0,
+      stackName: "CloudJanitorTest",
+      stackId:
+        "arn:aws:cloudformation:ap-southeast-2:12345:stack/CloudJanitorTest/e46581a0-ba48-11e9-a48c-0a4631dffc70",
+      expirationTime: 1565920584,
+      tags: '[{"value":"enabled","key":"stackjanitor"},{"value":"1","key":"v1"}]',
+    });
+  });
+});
+
+describe("monitorCloudFormationStack", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    jest.clearAllMocks();
+  });
+
+  const event = {
+    time: "2019-08-09T01:56:24Z",
+    detail: {
+      userIdentity: {
+        sessionContext: {
+          sessionIssuer: {
+            userName: "development-poweruser",
+          },
+        },
+      },
+      eventTime: "2019-08-09T01:56:24Z",
+      eventName: "CreateStack",
+
+      requestParameters: {
+        tags: [
+          {
+            value: "enabled",
+            key: "stackjanitor",
+          },
+          {
+            value: "1",
+            key: "v1",
+          },
+        ],
+        stackName: "CloudJanitorTest",
+        parameters: [],
+      },
+      responseElements: {
+        stackId:
+          "arn:aws:cloudformation:ap-southeast-2:12345:stack/CloudJanitorTest/e46581a0-ba48-11e9-a48c-0a4631dffc70",
+      },
+    },
+  };
+
+  const marshallOptions = {
+    // Whether to automatically convert empty strings, blobs, and sets to `null`.
+    convertEmptyValues: false, // false, by default.
+    // Whether to remove undefined values while marshalling.
+    removeUndefinedValues: false, // false, by default.
+    // Whether to convert typeof object to map attribute.
+    convertClassInstanceToMap: false, // false, by default.
+  };
+
+  const unmarshallOptions = {
+    // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
+    wrapNumbers: false, // false, by default.
+  };
+
+  const translateConfig = { marshallOptions, unmarshallOptions };
+
+  const DocumentClient = DynamoDBDocumentClient.from(
+    new DynamoDBClient({
+      endpoint: "http://localhost:4567",
+      region: "us-east-1",
+      credentials: {
+        accessKeyId: "test",
+        secretAccessKey: "test",
+      },
+    }),
+    translateConfig,
+  );
+
+  const TestTable = new Table({
+    name: "test-table",
+    partitionKey: "stackName",
+    sortKey: "stackId",
+    DocumentClient,
+  });
+
+  const TestEntity = new Entity({
+    name: "TestEntity",
+    autoExecute: false,
+    attributes: {
+      stackName: { type: "string", partitionKey: true }, // flag as partitionKey
+      stackId: { type: "string", sortKey: true }, // flag as sortKey and mark hidden
+      expirationTime: { type: "number" }, // set the attribute type
+      tags: { type: "string" },
+      deleteCount: { type: "number" },
+    },
+    table: TestTable,
+  });
+
+  test("monitorCloudFormationStack should be successful for: CreateStack", async () => {
+    event.detail.eventName = "CreateStack";
+    const status = await monitorCloudFormationStack(event, TestEntity);
+    expect(status).toEqual(MonitoringResultStatus.Success);
+  });
+
+  test("monitorCloudFormationStack should be successful for: UpdateStack", async () => {
+    event.detail.eventName = "UpdateStack";
+    const status = await monitorCloudFormationStack(event, TestEntity);
+    expect(status).toEqual(MonitoringResultStatus.Success);
+  });
+
+  test("monitorCloudFormationStack should be successful for: DeleteStack", async () => {
+    event.detail.eventName = "DeleteStack";
+    event.detail.requestParameters.stackName = "arn:other:teddy/my-stack";
+    const status = await monitorCloudFormationStack(event, TestEntity);
+    expect(status).toEqual(MonitoringResultStatus.Success);
+  });
+
+  test("monitorCloudFormationStack should be ignored for other eventName", async () => {
+    event.detail.eventName = "BumpStack";
+    const status = await monitorCloudFormationStack(event, TestEntity);
+    expect(status).toEqual(MonitoringResultStatus.Ignore);
+  });
+});
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/dynamoParser.ts
+```TS
+import {
+  AttributeValue,
+  DynamoDBRecord,
+  DynamoDBStreamEvent,
+  StreamRecord,
+} from "aws-lambda";
+import pkg from "lodash";
+import pino from "pino";
+import { unmarshall } from "../helpers";
+
+const dynamoLoggerName = "StackJanitor-DynamoDB-stream-logger";
+
+const createModuleLogger = (moduleName: string, level?: string) => {
+  return pino({
+    name: moduleName,
+    base: null,
+  }).child({
+    module: moduleName,
+    level,
+    base: null,
+  });
+};
+
+export enum DynamoDBEventType {
+  Insert = "INSERT",
+  Modify = "MODIFY",
+  Remove = "REMOVE",
+}
+
+export interface ParsedRecord<T> {
+  data: T | null;
+  oldData: T | null;
+  eventName: DynamoDBEventType;
+  eventID: string;
+}
+
+export const logger = createModuleLogger(dynamoLoggerName);
+
+const isModifiedRecordWithoutAnyChange = (record: DynamoDBRecord) =>
+  record.dynamodb &&
+  record.eventName === "MODIFY" &&
+  !isThereChange(record.dynamodb);
+
+function isThereChange(streamRecord: StreamRecord) {
+  if (!streamRecord.NewImage || !streamRecord.OldImage) {
+    logger.error("Failed to process DynamoDB stream", streamRecord);
+    return;
+  }
+
+  const { updatedAt: niUpdated, ...newImage } = streamRecord.NewImage;
+  const { updatedAt: oiUpdated, ...oldImage } = streamRecord.OldImage;
+
+  return !pkg.isEqual(oldImage, newImage);
+}
+
+interface UnmarshalledData<T> {
+  newData: T | null;
+  oldData: T | null;
+}
+
+interface Image {
+  [key: string]: AttributeValue;
+}
+
+function unmarshallItem(data: Image) {
+  return unmarshall(data);
+}
+
+function unmarshallStream<T>(record: DynamoDBRecord): UnmarshalledData<T> {
+  const newData = record.dynamodb?.NewImage
+    ? (unmarshallItem(record.dynamodb?.NewImage) as T)
+    : null;
+  const oldData = record.dynamodb?.OldImage
+    ? (unmarshallItem(record.dynamodb.OldImage) as T)
+    : null;
+
+  return { newData, oldData };
+}
+
+export function parseEventRecords<T>(
+  event: DynamoDBStreamEvent,
+): ParsedRecord<T>[] {
+  if (event.Records.length === 0) {
+    throw new Error("No records found.");
+  }
+
+  return event.Records.map((record): ParsedRecord<T> | undefined => {
+    if (!record.eventName) {
+      throw Error("DynamoDB stream event name is undefined");
+    }
+
+    if (isModifiedRecordWithoutAnyChange(record)) {
+      logger.error(
+        `DynamoDB stream record was not modified. Dropping event ID: ${record.eventID}`,
+      );
+      return;
+    }
+
+    const { newData, oldData } = unmarshallStream<T>(record);
+    const eventName = record.eventName as DynamoDBEventType;
+
+    return { data: newData, oldData, eventName, eventID: record.eventID! };
+  }).filter((data): data is ParsedRecord<T> => !!data);
+}
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/logCloudFormationStack.test.ts
+```TS
+import {
+  getTagsFromStacks,
+  getStackJanitorStatus,
+  index,
+} from "./logCloudFormationStack";
+
+import * as mcfs from "./monitorCloudFormationStack";
+import * as sinon from "sinon";
+import { mockClient } from "aws-sdk-client-mock";
+import {
+  CloudFormationClient,
+  DescribeStacksCommand,
+} from "@aws-sdk/client-cloudformation";
+
+jest.useFakeTimers();
+jest.mock("./monitorCloudFormationStack");
+
+const textStub = sinon.stub(mcfs, "handleDataItem");
+textStub.resolves();
+
+describe("logCloudFormationStack:getTagsFromStacks", () => {
+  test("it should return tags from Stack[]", async () => {
+    const Stacks = [
+      {
+        StackName: "StackJanitor-dev",
+        CreationTime: new Date(),
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: `stackjanitor`,
+            Value: "enabled",
+          },
+        ],
+      },
+    ];
+
+    const tags = getTagsFromStacks(Stacks);
+    expect(tags).toStrictEqual([
+      {
+        Key: "stackjanitor",
+        Value: "enabled",
+      },
+    ]);
+  });
+
+  test("it should return tags from Stack[] for multiple Stack", async () => {
+    const Stacks = [
+      {
+        StackName: "StackJanitor-dev",
+        CreationTime: new Date(),
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: `stackjanitor`,
+            Value: "enabled",
+          },
+        ],
+      },
+
+      {
+        StackName: "Test-dev",
+        CreationTime: new Date(),
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: `v1`,
+            Value: "1.0.5",
+          },
+        ],
+      },
+    ];
+
+    const tags = getTagsFromStacks(Stacks);
+    expect(tags.sort()).toEqual([
+      { Key: "v1", Value: "1.0.5" },
+      { Key: "stackjanitor", Value: "enabled" },
+    ]);
+  });
+
+  test("it should return tags from Stack[] for multiple Tags", async () => {
+    const Stacks = [
+      {
+        StackName: "StackJanitor-dev",
+        CreationTime: new Date(),
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: `stackjanitor`,
+            Value: "enabled",
+          },
+          {
+            Key: `v1`,
+            Value: "1.0.5",
+          },
+        ],
+      },
+    ];
+
+    const tags = getTagsFromStacks(Stacks);
+    expect(tags.sort()).toEqual([
+      { Key: "stackjanitor", Value: "enabled" },
+      { Key: "v1", Value: "1.0.5" },
+    ]);
+  });
+
+  test("it should return empty tags from Stack[] for no Tags", async () => {
+    const Stacks = [
+      {
+        StackName: "StackJanitor-dev",
+        CreationTime: new Date(),
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [],
+      },
+    ];
+
+    const tags = getTagsFromStacks(Stacks);
+    expect(tags).toEqual([]);
+  });
+});
+
+describe("logCloudFormationStack:getStackJanitorStatus", () => {
+  test("it should return stackjanitor tag from Stack[]", async () => {
+    const Tags = [
+      {
+        key: `stackjanitor`,
+        value: "enabled",
+      },
+      {
+        key: `test`,
+        value: "disabled",
+      },
+    ];
+
+    const Status = getStackJanitorStatus(Tags);
+    expect(Status).toEqual("enabled");
+  });
+
+  test("it should return stackjanitor tag from Stack[]", async () => {
+    const Tags = [
+      {
+        Key: `stackjanitor`,
+        Value: "disabled",
+      },
+      {
+        Key: `test`,
+        Value: "disabled",
+      },
+    ];
+
+    const Status = getStackJanitorStatus(Tags);
+    expect(Status).toEqual("disabled");
+  });
+
+  test("it should return stackjanitor tag from Stack[]", async () => {
+    const Tags = [
+      {
+        Key: `v1`,
+        Value: "1.0.5",
+      },
+    ];
+
+    const Status = getStackJanitorStatus(Tags);
+    expect(Status).toEqual("disabled");
+  });
+});
+
+describe("logCloudFormationStack", () => {
+  test("it should return stackjanitor tag value", async () => {
+    const sample_event = {
+      id: "71e8ce4c-d880-c5b9-f14d-672607e28830",
+      source: "aws.cloudformation",
+      detail: {
+        eventVersion: "1.05",
+        userIdentity: {
+          type: "AssumedRole",
+          sessionContext: {
+            sessionIssuer: {
+              userName: "development-deployer",
+            },
+          },
+        },
+        eventName: "UpdateStack",
+        requestParameters: {
+          parameters: null,
+          stackName: "stackjanitor",
+        },
+        responseElements: {
+          stackId:
+            "arn:aws:cloudformation:ap-southeast-2:12345:stack/test/36ad7930-b8c4-11e9-aadd-0ae3f52010f8",
+        },
+      },
+    };
+
+    const cfMock = mockClient(CloudFormationClient);
+    cfMock.on(DescribeStacksCommand).resolves({
+      Stacks: [
+        {
+          StackName: "StackJanitor-dev",
+          CreationTime: new Date(),
+          StackStatus: "CREATE_COMPLETE",
+          Tags: [
+            {
+              Key: `stackjanitor`,
+              Value: "enabled",
+            },
+            {
+              Key: `v1`,
+              Value: "1.0.5",
+            },
+          ],
+        },
+      ],
+    });
+
+    const logStackOutput = await index(sample_event);
+
+    expect(logStackOutput).toHaveProperty("results");
+    expect(logStackOutput.results).toStrictEqual({
+      stackjanitor: "enabled",
+    });
+    expect(logStackOutput).toHaveProperty("event");
+  });
+});
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/logCloudFormationStack.ts
+```TS
+import {
+  CloudFormationClient,
+  DescribeStacksCommand,
+  DescribeStacksCommandInput,
+  Stack,
+  Tag,
+} from "@aws-sdk/client-cloudformation";
+
+import { CloudFormationEvent, CustomTag } from "stackjanitor";
+import { logger } from "../logger";
+import {
+  generateDeleteItem,
+  handleDataItem,
+  RequestType,
+} from "./monitorCloudFormationStack";
+import { StackStatus, TagName } from "../tag/TagStatus";
+import { Actions, JanitorRecord } from "../data/DynamoDataModel";
+
+export const getTagsFromStacks = (stacks: Stack[]): Tag[] =>
+  stacks
+    .filter((stackInfo) => Array.isArray(stackInfo.Tags))
+    .map((stackInfo) => stackInfo.Tags!)
+    .reduce((currentTag, accumulatedTags) =>
+      accumulatedTags.concat(currentTag),
+    );
+
+export const findTag = (tags: CustomTag[]) =>
+  tags.find((t) => t.key === TagName);
+
+export const getStackJanitorStatus = (tags: CustomTag[]): StackStatus => {
+  const tag = findTag(tags);
+  if (tag && tag.value === StackStatus.Enabled) {
+    return StackStatus.Enabled;
+  }
+  return StackStatus.Disabled;
+};
+
+interface TagsWithValues {
+  Key: string;
+  Value: string;
+}
+
+export const convertTags = (tags: Tag[]): CustomTag[] => {
+  const filtered = tags.filter((tag) => {
+    return typeof tag.Key === "string" && typeof tag.Value === "string";
+  }) as TagsWithValues[];
+  return filtered.map((tag) => ({
+    key: tag.Key,
+    value: tag.Value,
+  }));
+};
+
+export const index = async (event: CloudFormationEvent) => {
+  const cloudFormation = new CloudFormationClient();
+  let stackStatus: StackStatus = StackStatus.Disabled;
+  const eventName = event.detail.eventName;
+
+  // only CreateEvent has tags in event->detail->requestParameters
+  if (eventName === RequestType.Create) {
+    const tags = event.detail.requestParameters.tags;
+    stackStatus = getStackJanitorStatus(tags);
+  } else {
+    // For all other types of Stack events tags need to be fetched
+    try {
+      // early exit when we are attempting an UpdateStack call (edge case) before create and we get this error
+      if (
+        event.detail.errorCode &&
+        event.detail.errorCode === "ValidationException"
+      ) {
+        logger.info({
+          event,
+        });
+        return {
+          event,
+          results: {
+            stackjanitor: stackStatus,
+          },
+        };
+      }
+      const describeStacksCommandInput: DescribeStacksCommandInput = {
+        StackName: event.detail.requestParameters.stackName,
+      };
+      const describeStacksCmd = new DescribeStacksCommand(
+        describeStacksCommandInput,
+      );
+      const { Stacks } = await cloudFormation.send(describeStacksCmd);
+
+      if (Stacks) {
+        const tags = getTagsFromStacks(Stacks);
+        const customTags = convertTags(tags);
+        event.detail.requestParameters.tags = customTags;
+        stackStatus = getStackJanitorStatus(customTags);
+      }
+    } catch (e: any) {
+      logger.error(
+        {
+          event,
+          stack: e.stack,
+        },
+        e.message,
+      );
+    }
+
+    // if updated stack has no or disabled stackjanitor tag remove Dynamo row
+    if (
+      eventName === RequestType.Update &&
+      stackStatus !== StackStatus.Enabled
+    ) {
+      const item = await generateDeleteItem(event);
+      await handleDataItem(item, JanitorRecord, Actions.Destroy);
+    }
+  }
+  return {
+    event,
+    results: {
+      stackjanitor: stackStatus,
+    },
+  };
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/handlers/deleteCloudFormationStack.ts
+```TS
+import { DynamoDBStreamEvent } from "aws-lambda";
+import { logger } from "../logger";
+import { StackStatus } from "../tag/TagStatus";
+import {
+  DynamoDBEventType,
+  ParsedRecord,
+  parseEventRecords,
+} from "./dynamoParser";
+import { CustomTag, DataItem } from "stackjanitor";
+import { deleteStack } from "../cloudformation";
+import config from "../config";
+import {
+  generateRepeatedDeleteItem,
+  handleDataItem,
+} from "./monitorCloudFormationStack";
+import { Actions, JanitorRecord } from "../data/DynamoDataModel";
+
+class StackJanitorNotEnabledError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+function isStackJanitorEnabled(tags: CustomTag[]) {
+  const status = tags.find((tag) => tag.key === "stackjanitor")?.value;
+  return status === StackStatus.Enabled;
+}
+
+export const deleteCloudFormationStack = async (item: DataItem) => {
+  const { stackName, tags } = item;
+
+  const isEnabled = isStackJanitorEnabled(JSON.parse(tags));
+
+  if (!isEnabled) {
+    throw new StackJanitorNotEnabledError(
+      `StackJanitor is not enabled for ${stackName}`,
+    );
+  }
+
+  logger.info({ stackInfo: item }, `Deleting CFN stack: ${stackName}`);
+
+  await deleteStack(stackName);
+
+  logger.info(
+    { stackInfo: item },
+    `CFN Stack: ${stackName} deleted successfully`,
+  );
+};
+
+async function processRecords(records: ParsedRecord<DataItem>[]) {
+  for (const record of records) {
+    const { eventID, oldData, eventName } = record;
+    const eventDetails = {
+      eventID,
+      eventName,
+    };
+
+    logger.info(eventDetails, `Started processing Dynamo stream.`);
+
+    if (!(eventName === DynamoDBEventType.Remove) || !oldData) {
+      logger.info(eventDetails, `Ignoring event ${eventName}.`);
+      return;
+    }
+
+    if (!oldData) {
+      logger.info(
+        eventDetails,
+        `Data is null for ${eventName}. Cannot proceed.`,
+      );
+      return;
+    }
+
+    try {
+      await deleteCloudFormationStack(oldData);
+    } catch (err: any) {
+      if (
+        err instanceof StackJanitorNotEnabledError ||
+        (err instanceof ValidationError &&
+          err.message.includes("does not exist"))
+      ) {
+        logger.error(
+          {
+            stackInfo: oldData,
+            ...eventDetails,
+          },
+          `${err.message}`,
+        );
+        return;
+      }
+
+      logger.error(
+        {
+          stackInfo: oldData,
+          ...eventDetails,
+        },
+        `${err.message}`,
+      );
+      // throw err;
+
+      // Handles when there is a dependency between some stack deletes
+      // and a successive attempt at deleting will succeed.
+      // So here we recreate the dynamodb record with a shorter TTL
+      // based on the deleteCount
+      if (
+        record.oldData?.deleteCount &&
+        record.oldData.deleteCount > Number(config.MAX_CLEANUP_RETRY)
+      ) {
+        // Log message to cloudwatch
+        logger.error(
+          {
+            stackInfo: oldData,
+            ...eventDetails,
+          },
+          `Failed to delete stack after ${config.MAX_CLEANUP_RETRY} additional attempts: ${oldData.stackName}`,
+        );
+      } else {
+        // Recreate record
+        const deleteItem = generateRepeatedDeleteItem(oldData);
+        await handleDataItem(deleteItem, JanitorRecord, Actions.Create);
+        return;
+      }
+    }
+  }
+}
+
+export const index = async (event: DynamoDBStreamEvent) => {
+  const records = parseEventRecords<DataItem>(event);
+  await processRecords(records);
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/helpers.ts
+```TS
+import { Stack } from "@aws-sdk/client-cloudformation";
+
+export const returnStackStatus = (stacks: Stack[]) => {
+  const stackStatus = [
+    "CREATE_COMPLETE",
+    "UPDATE_COMPLETE",
+    "CREATE_FAILED",
+    "ROLLBACK_FAILED",
+    "ROLLBACK_COMPLETE",
+    "DELETE_FAILED",
+    "UPDATE_ROLLBACK_FAILED",
+    "UPDATE_ROLLBACK_COMPLETE",
+    "IMPORT_ROLLBACK_FAILED",
+    "IMPORT_ROLLBACK_COMPLETE",
+  ];
+  return stacks.filter((stack) => {
+    return stackStatus.includes(String(stack.StackStatus));
+  });
+};
+
+export const returnStackTags = (stacks: Stack[]) => {
+  return stacks.filter((stack) => {
+    return (
+      stack.Tags &&
+      stack.Tags.find((tag) => tag.Key === "stackjanitor")?.Value === "enabled"
+    );
+  });
+};
+
+export const getStackName = (stack: Stack[]): string[] => {
+  const stackNames = stack.map((stack) => {
+    const stackName = stack.StackName;
+    return stackName;
+  });
+  return stackNames as string[];
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/describeAllStacks.ts
+```TS
+import {
+  CloudFormationClient,
+  DescribeStacksCommand,
+  DescribeStacksCommandInput,
+  Stack,
+} from "@aws-sdk/client-cloudformation";
+
+export const describeAllStacks = async (
+  nextToken?: string,
+): Promise<Stack[]> => {
+  const cloudFormation = new CloudFormationClient();
+  let returnValue: Stack[] = [];
+  const describeStacksInput: DescribeStacksCommandInput = {
+    NextToken: nextToken,
+  };
+  const describeStacksCmd = new DescribeStacksCommand(describeStacksInput);
+  const allStacks = await cloudFormation.send(describeStacksCmd);
+  if (!allStacks.Stacks) {
+    return returnValue;
+  }
+  returnValue = returnValue.concat(allStacks.Stacks);
+  if (allStacks.NextToken) {
+    returnValue = returnValue.concat(
+      await describeAllStacks(allStacks.NextToken),
+    );
+  }
+  return returnValue;
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/describeAllStacks.test.ts
+```TS
+import { describeAllStacks } from "./describeAllStacks";
+
+import {
+  DescribeStacksOutput,
+  Stack,
+  CloudFormationClient,
+  DescribeStacksCommand,
+} from "@aws-sdk/client-cloudformation";
+import { mockClient } from "aws-sdk-client-mock";
+
+describe("describeAllStacks", () => {
+  const cfMock = mockClient(CloudFormationClient);
+  beforeEach(() => {
+    cfMock.reset();
+  });
+
+  test("describe is working with empty stacks", async () => {
+    const result: Stack[] = [];
+    const mockResolves: DescribeStacksOutput = {};
+    cfMock.on(DescribeStacksCommand).resolves(mockResolves);
+    const mystacks = await describeAllStacks();
+    expect(mystacks).toEqual(result);
+  });
+
+  test("describe is working with single large result", async () => {
+    const now = new Date();
+    const output: DescribeStacksOutput = {
+      Stacks: [
+        {
+          StackName: "test1",
+          CreationTime: now,
+          StackStatus: "CREATE_COMPLETE",
+        },
+        {
+          StackName: "test2",
+          CreationTime: now,
+          StackStatus: "UPDATE_COMPLETE",
+        },
+        {
+          StackName: "test3",
+          CreationTime: now,
+          StackStatus: "ROLLBACK_COMPLETE",
+        },
+      ],
+    };
+
+    let expected: Stack[] = [];
+    expected = expected.concat(output.Stacks as Stack[]);
+
+    cfMock.on(DescribeStacksCommand).resolves(output);
+
+    const result = await describeAllStacks();
+    expect(result).toEqual(expected);
+  });
+
+  test("describe is working with multiple stacks and NextToken", async () => {
+    const now = new Date();
+    const first_output: DescribeStacksOutput = {
+      Stacks: [
+        {
+          StackName: "test1",
+          CreationTime: now,
+          StackStatus: "CREATE_COMPLETE",
+        },
+      ],
+      NextToken: "str1",
+    };
+    const second_output: DescribeStacksOutput = {
+      Stacks: [
+        {
+          StackName: "test2",
+          CreationTime: now,
+          StackStatus: "UPDATE_COMPLETE",
+        },
+      ],
+      NextToken: "str2",
+    };
+    const third_output: DescribeStacksOutput = {
+      Stacks: [
+        {
+          StackName: "test3",
+          CreationTime: now,
+          StackStatus: "ROLLBACK_COMPLETE",
+        },
+      ],
+    };
+
+    let expected: Stack[] = [];
+    expected = expected.concat(first_output.Stacks as Stack[]);
+    expected = expected.concat(second_output.Stacks as Stack[]);
+    expected = expected.concat(third_output.Stacks as Stack[]);
+
+    cfMock.on(DescribeStacksCommand).resolves(first_output);
+    cfMock
+      .on(DescribeStacksCommand, { NextToken: "str1" })
+      .resolves(second_output);
+    cfMock
+      .on(DescribeStacksCommand, { NextToken: "str2" })
+      .resolves(third_output);
+
+    const result = await describeAllStacks();
+    expect(result).toEqual(expected);
+  });
+});
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/isStackExpired.ts
+```TS
+import { Stack } from "@aws-sdk/client-cloudformation";
+import config from "../../config";
+
+export const isStackExpired = (stack: Stack[]) => {
+  const DefaultSearchDeletePeriod =
+    Number(config.DEFAULT_EXPIRATION_PERIOD) + 259200; // 259200 seconds === 3 days
+  const expiredStacks = stack.filter((stack) => {
+    let dateTime = new Date().getTime() / 1000;
+    if (stack.LastUpdatedTime) {
+      const UpdateExpirationTime =
+        new Date(stack.LastUpdatedTime).getTime() / 1000 +
+        DefaultSearchDeletePeriod;
+      if (UpdateExpirationTime < dateTime) {
+        return stack;
+      }
+    } else if (stack.CreationTime) {
+      const CreateExpirationTime =
+        new Date(stack.CreationTime).getTime() / 1000 +
+        DefaultSearchDeletePeriod;
+      if (CreateExpirationTime < dateTime) {
+        return stack;
+      }
+    } else {
+      // no create/update time available return stack for deletion as we don't want it!
+      return stack;
+    }
+  });
+  return expiredStacks;
+};
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/helpers.test.ts
+```TS
+import { getStackName, returnStackStatus, returnStackTags } from "./helpers";
+
+describe("returnStackStatus", () => {
+  test("it should return a correct stack list with desired stack status", async () => {
+    const creationtime = new Date();
+    const stacks = [
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test1/2b549de0-0bb3-11ec-9a21-0aa93ce2a038",
+        StackName: "test1",
+        CreationTime: creationtime,
+        StackStatus: "CREATE_COMPLETE",
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test3/b26fc5b0-0961-11ec-9a95-06c05975dd5c",
+        StackName: "test3",
+        CreationTime: creationtime,
+        StackStatus: "UPDATE_COMPLETE",
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test2/8612c450-0960-11ec-a547-0268dfce7816",
+        StackName: "test2",
+        CreationTime: creationtime,
+        StackStatus: "ROLLBACK_COMPLETE",
+      },
+      {
+        StackName: "test5",
+        CreationTime: creationtime,
+        StackStatus: "DELETE_COMPLETE",
+      },
+    ];
+    const myStacks = await returnStackStatus(stacks);
+    expect(myStacks).toStrictEqual([
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test1/2b549de0-0bb3-11ec-9a21-0aa93ce2a038",
+        StackName: "test1",
+        CreationTime: creationtime,
+        StackStatus: "CREATE_COMPLETE",
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test3/b26fc5b0-0961-11ec-9a95-06c05975dd5c",
+        StackName: "test3",
+        CreationTime: creationtime,
+        StackStatus: "UPDATE_COMPLETE",
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test2/8612c450-0960-11ec-a547-0268dfce7816",
+        StackName: "test2",
+        CreationTime: creationtime,
+        StackStatus: "ROLLBACK_COMPLETE",
+      },
+    ]);
+  });
+});
+
+describe("returnStackTags", () => {
+  test("it should return a correct stack list with the tag 'stackjanitor' enabled ", async () => {
+    const creationtime = new Date();
+    const stacks = [
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test1/2b549de0-0bb3-11ec-9a21-0aa93ce2a038",
+        StackName: "test1",
+        CreationTime: creationtime,
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test3/b26fc5b0-0961-11ec-9a95-06c05975dd5c",
+        StackName: "test3",
+        CreationTime: creationtime,
+        StackStatus: "UPDATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "disabled",
+          },
+        ],
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test2/8612c450-0960-11ec-a547-0268dfce7816",
+        StackName: "test2",
+        CreationTime: creationtime,
+        StackStatus: "ROLLBACK_COMPLETE",
+      },
+    ];
+    const myStacks = await returnStackTags(stacks);
+    expect(myStacks).toStrictEqual([
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test1/2b549de0-0bb3-11ec-9a21-0aa93ce2a038",
+        StackName: "test1",
+        CreationTime: creationtime,
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("getStackName", () => {
+  test("it should return a correct stack name list", async () => {
+    const stacks = [
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test1/2b549de0-0bb3-11ec-9a21-0aa93ce2a038",
+        StackName: "test1",
+        CreationTime: new Date("2021-08-25T04:12:55"),
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test3/b26fc5b0-0961-11ec-9a95-06c05975dd5c",
+        StackName: "test3",
+        CreationTime: new Date("2021-08-24T04:12:55"),
+        StackStatus: "UPDATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+    ];
+    const myStacks = await getStackName(stacks);
+    expect(myStacks).toStrictEqual(["test1", "test3"]);
+  });
+});
+
+```
+
+/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/isStackExpired.test.ts
+```TS
+import { isStackExpired } from "./isStackExpired";
+
+describe("isStackExpired", () => {
+  test("it should return a correct stack list with creation/update time is older than 10 days", async () => {
+    let lastupdatedtime_num = new Date().getTime() / 1000 - 5 * 24 * 60 * 60;
+    let creationtime_num = new Date().getTime() / 1000 - 11 * 24 * 60 * 60;
+    let creationtime = new Date(creationtime_num * 1000);
+    let lastupdatedtime = new Date(lastupdatedtime_num * 1000);
+
+    const stacks = [
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test1/2b549de0-0bb3-11ec-9a21-0aa93ce2a038",
+        StackName: "test1",
+        CreationTime: creationtime,
+        LastUpdatedTime: lastupdatedtime,
+        StackStatus: "CREATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test3/b26fc5b0-0961-11ec-9a95-06c05975dd5c",
+        StackName: "test3",
+        CreationTime: creationtime,
+        StackStatus: "UPDATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test2/8612c450-0960-11ec-a547-0268dfce7816",
+        StackName: "test2",
+        CreationTime: new Date(),
+        StackStatus: "ROLLBACK_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+    ];
+    const myStacks = isStackExpired(stacks);
+    expect(myStacks).toStrictEqual([
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-southeast-2:019550661163:stack/test3/b26fc5b0-0961-11ec-9a95-06c05975dd5c",
+        StackName: "test3",
+        CreationTime: creationtime,
+        StackStatus: "UPDATE_COMPLETE",
+        Tags: [
+          {
+            Key: "stackjanitor",
+            Value: "enabled",
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+```

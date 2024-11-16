@@ -1,0 +1,42 @@
+{
+    "language": "TS",
+
+    "summarize_codebase": true,
+    "codebase_readme_path": "StackJanitor/README.md",
+    "files_to_summarize_paths": "StackJanitor/function1/context-files-paths.txt",
+
+    "codebase_summary_prompt_template": "prompt-templates/codebase-summarization-prompt-template.txt",
+    "codebase_summary_prompt_save_path": "StackJanitor/function1/prompts/codebase-summarization-prompt.txt",
+    "codebase_summary_save_path": "StackJanitor/function1/codebase-summary.txt",
+    
+    "function_description_prompt_template": "prompt-templates/function-description-prompt-template.txt",
+    "function_description_prompt_save_path": "StackJanitor/function1/prompts/function-description-prompt.txt",
+    "function_description_save_path": "StackJanitor/function1/function-description.txt",
+
+    "function_generation_prompt_template_type1": "prompt-templates/function-generation-prompt-template/type1.txt",
+    "function_generation_prompt_type1_save_path": "StackJanitor/function1/prompts/function-generation-prompt/type1.txt",
+    
+    "function_generation_prompt_template_type2": "prompt-templates/function-generation-prompt-template/type2.txt",
+    "function_generation_prompt_type2_save_path": "StackJanitor/function1/prompts/function-generation-prompt/type2.txt",
+    
+    "function_generation_prompt_template_type3": "prompt-templates/function-generation-prompt-template/type3.txt",
+    "function_generation_prompt_type3_save_path": "StackJanitor/function1/prompts/function-generation-prompt/type3.txt",
+        
+    "chosen_function_path": "/home/shrikara/Downloads/StackJanitor/src/optional-handlers/searchDeleteCloudformationStack.ts",
+    "chosen_function": "searchDeleteCloudformationStack.ts",
+    "original_function_save_path": "StackJanitor/function1/ORIGINAL-searchDeleteCloudformationStack.ts",
+    
+    "example_function_description1": "StackJanitor/function2/function-description.txt",
+    "example_function_code1": "StackJanitor/function2/ORIGINAL-logCloudFormationStack.ts",
+    "example_function_description2": "StackJanitor/function3/function-description.txt",
+    "example_function_code2": "StackJanitor/function3/ORIGINAL-monitorCloudFormationStack.ts",
+    
+    "generated_function_type1_save_dir": "StackJanitor/function1/GENERATED/type1",
+    "generated_function_type2_save_dir": "StackJanitor/function1/GENERATED/type2",
+    "generated_function_type3_save_dir": "StackJanitor/function1/GENERATED/type3",
+
+    "run_codebleu": true,
+    "codebleu_type1_save_dir": "StackJanitor/function1/codebleu-results/type1",
+    "codebleu_type2_save_dir": "StackJanitor/function1/codebleu-results/type2",
+    "codebleu_type3_save_dir": "StackJanitor/function1/codebleu-results/type3"
+}

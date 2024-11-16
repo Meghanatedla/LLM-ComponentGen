@@ -1,0 +1,186 @@
+You are a computer scientist specializing in serverless computing (especially FaaS).
+You are working with a FaaS codebase whose README is as follows:
+
+# StackJanitor
+
+![StackJanitor](https://i.imgur.com/XXdfuf9.png)
+
+![](https://github.com/lendi-au/StackJanitor/workflows/Build/badge.svg)
+![](https://github.com/lendi-au/StackJanitor/workflows/Release/badge.svg)
+
+StackJanitor is an event-driven serverless application that cleans up AWS CloudFormation Stacks in development environments based on TTL (expiration time) and git pull request events. It cleans up unused development CFN stacks to help you save AWS cloud development costs.
+
+## Use Case
+
+We initially came up with the idea for StackJanitor when we needed to start cleaning up a lot of our ephemeral stacks on a regular basis. There are some that currently do this using polling mechanisms, but we figured we could use this as an opportunity to come up with an event-driven serverless app that can do this without having to continually poll resources.
+
+## How it works
+
+StackJanitor automatically adds all of the CloudFormation stacks that you create in your AWS account to a DynamoDB Table.
+If you have specified a stacktag `stackjanitor` to `enabled`, StackJanitor will add your CloudFormation Stack to DynamoDB, setting a TTL field on it to 7 days (this is default, but can be changed).
+
+When the DynamoDB row expires and deletes the row, a lambda function is then triggered that deletes your stack.
+
+StackJanitor can also delete stacks using either a Github or Bitbucket webhook. Our current workflow uses merged pull request events to trigger the webhook so that we can quickly delete stacks as part of our development workflow.
+
+To use this feature, your CloudFormation Stack must also be tagged with `BRANCH` and `REPOSITORY` in order for StackJanitor to find the stack associated with your branch/repository combination and delete it.
+
+CloudFormation stack creation event will produce a CloudTrail log which will trigger a step function/lambda to set a TTL for fresh stacks in a DynamoDB table.
+CloudTrail logs from any update stack events concerning that development stack will re-invoke the Lambda function to refresh the TTL.
+
+However, If stack resources remain unused for certain period of time, TTL expiration in the DynamoDB table will invoke the Lambda (responsible for cleaning up the stack) to perform a safe cleaning up process of the CFN stack.
+
+## Architecture
+
+![StackJanitor Architecture](./img/StackJanitor.png "StackJanitor Architecture")
+
+![StackJanitor Architecture](./img/StackJanitor-git.jpg "StackJanitor Architecture")
+
+It's good to note that the actual CloudFormation delete is always done by the
+`./src/handlers/deleteCloudFormationStack.ts` function AFTER the DynamoDB
+stream for expired/deleted records.
+
+As the data flow will create another cloudtrail event with the 'DeleteStack'
+operation, the lambda function will be invoked a second time but nothing
+will happen.
+
+## Installation
+
+1. Clone the repo.
+   `git clone https://github.com/lendi-au/StackJanitor.git`
+2. Install node modules by running `npm install`
+3. Install the Serverless Framework open-source CLI by running `npm install -g serverless`
+4. Set AWS credentials. Serverless framework uses AWS credentials configured at `~/.aws/credentials`
+
+   Follow [this guide](https://serverless.com/framework/docs/providers/aws/guide/credentials/) to setup AWS credentials for serverless.
+
+5. Deploy StackJanitor by running `serverless deploy`
+6. Put a tag in CloudFormation stack `stackjanitor = "enabled"` to enable monitoring.
+
+## Configuration
+
+### Pre-Requisites
+
+You will need to have CloudTrail running in your account as CloudTrail events trigger Lambda functions.
+
+### Options
+
+The app comes pre-configured with most things it needs. By default it sets the expiry time on a stack to 7 days.
+You can override this using the `DEFAULT_EXPIRATION_PERIOD` custom variable found in the `serverless.yml`
+
+## Webhook Support
+
+If you don't want to wait 7 days for your stack to be deleted, you can trigger
+a deletion event using a GitHub or Bitbucket webhook.
+
+As part of your CloudFormation build, make sure you tag your CloudFormation
+Stack with:
+REPOSITORY = `Repository Name`
+BRANCH = `Git Branch`
+
+Your webhook endpoint will be available when you first set up your serverless
+app with `serverless deploy`
+
+### Bitbucket
+
+1. Go to `Settings > Webhooks` and click `Add Webhook`.
+2. Put the webhook endpoint in `URL` field.
+3. Set `Status` to `Active`.
+4. Set `Triggers` to `Choose from a full list of triggers` and select Pull request `Merged` and `Declined`.
+5. Save the settings.
+
+### GitHub
+
+1. Go to `Settings > Webhooks` and click `Add Webhook`.
+2. Put the webhook endpoint in `Payload URL` field.
+3. Set Content type to `application/json`.
+4. Select `Let me select individual events` and choose `Pull requests`.
+5. Choose `Active` to activate the webhook trigger.
+6. Save the settings.
+
+### Additional Lambda invocation
+
+There was a need for us to extend the gitHook functionality but this wasn't
+directly related to the overall functionality of Stackjanitor.
+
+Hence, we've extended the gitHook lambda handler to be able to invoke another
+lambda function by setting the `EXTERNAL_LAMBDA` environment variable with the
+ARN of the lambda function to invoke.
+
+The default permission of the `serverless.yml` has also been updated to allow
+for lambda invocations.
+
+## Optional scheduled Lambda function for scanning and deleting old stacks
+
+This is a fallback mechanism which can remove stacks older than
+`DEFAULT_EXPIRATION_PERIOD` with the `stackjanitor: enabled` tag on the stack.
+
+This optional scheduled Lambda function is handled by
+`./src/optional-handlers/searchDeleteCloudformationStacks.ts` which can help
+scan and delete old stacks when the stacks are not cleaned up properly.
+
+This optional function is not enabled by default. You can update
+`serverless.yml` to enable this function.
+
+## Possible improvements
+
+- Maybe we don't care to track `DeleteStack` events and perform table cleanup
+  items around this as it leads to a bit of logic that goes around in circles.
+
+## Upcoming features
+
+- [ ] Slack Notifications when stack has been deleted
+- [ ] Interactive Slack Messages to extend expiry time
+
+Your task is to add a new function to this codebase.
+The function should have the following functionality:
+
+The function `index` is a serverless function (AWS Lambda handler) written in TypeScript that determines the StackJanitor status (enabled or disabled) for a CloudFormation stack based on CloudFormation events.  This status is crucial for determining whether StackJanitor should manage the lifecycle of the resources within the stack.
+
+**1. Implementation Details:**
+
+* **Parameters:** The function takes a single parameter, `event`, of type `CloudFormationEvent`. This event object contains details about a CloudFormation stack operation (create, update, delete, etc.) triggered within AWS.  Crucially, it includes information like `eventName`, `requestParameters` (containing `stackName` and sometimes `tags`), and potentially `errorCode`.
+* **Return Value:**  The function returns a Promise that resolves to an object containing the original `event` and a `results` object. The `results` object has a `stackjanitor` property, which holds the determined `StackStatus` (either "Enabled" or "Disabled").
+* **Logic:**  The function's core logic revolves around determining the `stackjanitor` tag's value associated with the CloudFormation stack.  It handles different CloudFormation event types (`Create`, `Update`, etc.) differently.
+    * For `Create` events, it looks for the `stackjanitor` tag directly within the `event.detail.requestParameters.tags`.
+    * For other event types (like `Update`, `Delete`), it fetches the tags associated with the stack using the AWS CloudFormation API (specifically `DescribeStacksCommand`).
+* **Error Handling:** The function includes error handling for API calls (specifically catching exceptions during the `DescribeStacks` operation). It logs errors and returns a default `stackjanitor` status of "Disabled" if tag retrieval fails.
+* **DynamoDB Interaction (Conditional):**  If the event is an `Update` event and the determined `stackjanitor` status is "Disabled", the function interacts with a DynamoDB table (via helper functions `generateDeleteItem` and `handleDataItem`) to delete the corresponding record for the stack. This indicates that StackJanitor should no longer manage the stack's resources.
+
+
+**2. Relationships:**
+
+* **AWS SDK:** The function directly depends on the AWS SDK for JavaScript (`@aws-sdk/client-cloudformation`) for interacting with the CloudFormation service.
+* **Helper Functions:** The function utilizes several helper functions:
+    * `getTagsFromStacks`: Extracts tags from an array of `Stack` objects returned by the CloudFormation API.
+    * `findTag`: Searches for a specific tag (by key) within an array of tags.
+    * `getStackJanitorStatus`: Determines the `StackStatus` based on the presence and value of the `stackjanitor` tag.
+    * `convertTags`: Converts tags from the AWS SDK format to a custom `CustomTag` format.
+    * `generateDeleteItem`: Creates a DynamoDB item for deletion (used in the `Update` event handling).
+    * `handleDataItem`: Interacts with the DynamoDB table to perform actions (like delete).
+* **Data Types:** The function utilizes custom types like `CloudFormationEvent`, `CustomTag`, `JanitorRecord`, and enums like `StackStatus`, `TagName`, and `Actions`.  These are defined elsewhere in the codebase.
+* **Logger:**  It uses a `logger` object for logging information and errors.
+
+
+**3. Structure:**
+
+The function follows a branched structure based on the `eventName`:
+
+* **Create Event:** Directly extracts tags and determines status.
+* **Other Events:** Fetches tags using the AWS SDK, handles potential API errors, and then determines status. Within this branch, there's a further conditional block for `Update` events where a DynamoDB delete operation might be triggered if the `stackjanitor` status is "Disabled".
+
+
+**4. Purpose and Role:**
+
+The function serves as the entry point for StackJanitor's response to CloudFormation events.  Its primary purpose is to determine whether StackJanitor should manage a given CloudFormation stack's resources. It does so by checking the `stackjanitor` tag's status.  This information is then used downstream by other parts of the StackJanitor system to orchestrate resource lifecycle management.  The function plays a critical role in the initial setup and ongoing management of stacks by StackJanitor.
+
+
+
+This description provides the essential information for another developer to understand and recreate the functionality of the `index` function. While it outlines the core logic and interactions, it leaves room for implementation-specific optimizations and improvements in the rewritten code.
+
+
+Please generate the complete code for this function, ensuring it integrates seamlessly with the existing system.
+The code should follow best practices for serverless development, and it must be in accordance with the current architecture of the system.
+Note that no human will evaluate the code you generate; your code will be deployed directly to the system.
+Ensure that you do not provide anything except the code. Include any relevant information in comments.
+If you lack any information to write the complete code, mention this in a comment and make a reasonable assumption from the context and your knowledge.

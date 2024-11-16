@@ -1,0 +1,6 @@
+Repo,Function Num,Prompt Type,Model,Average Halstead,Halsteads
+StackJanitor,1,type2,GPT-3_5-Turbo,305.66866666666664,"[276.905, 276.905, 363.196]"
+laconiajs_laconia,2,type3,GPT-4,1433.8326666666665,"[1521.067, 1168.339, 1612.092]"
+JuliaRegistries_TagBot,1,type1,DeepSeek-Coder-V2,76.12899592752422,"[97.70233280920246, 73.57433114250613, 57.110323830864054]"
+craftship_codebox-npm,2,type3,CodeQwen1_5-7B-Chat,1308.3363333333334,"[1260.0, 1246.63, 1418.379]"
+JuliaRegistries_TagBot,1,type2,Artigenz-Coder-DS-6_7B,78.38534710851853,"[80.71062275542812, 84.9585502688717, 69.48686830125578]"

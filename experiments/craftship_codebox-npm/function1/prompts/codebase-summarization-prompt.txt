@@ -1,0 +1,3984 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to summarize the entire codebase provided below so that other developers may use it when adding more functions to this codebase. Please ensure that it is a detailed summary and includes the following details:
+
+1. A high-level overview of the main functionalities offered by the codebase, highlighting key modules or components.
+2. A breakdown of important functions and what specific tasks or executions they handle.
+3. Identify any external dependencies, libraries, or frameworks the code relies on, and describe how they are integrated into the codebase.
+4. Describe the overall structure of the codebase (e.g., how files are organized, major classes or modules).
+5. Explain any relationships or interactions between different modules or components, such as how data flows between them. 
+
+Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/whoami/get.js
+```JS
+export default async ({ requestContext }, _, callback) =>
+  callback(null, {
+    statusCode: 200,
+    body: JSON.stringify({
+      username: requestContext.authorizer.username,
+    }),
+  });
+
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/s3.js
+```JS
+import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
+
+export default class Storage {
+  constructor({ region, bucket }) {
+    this.S3 = new AWS.S3({
+      signatureVersion: 'v4',
+      region,
+      params: {
+        Bucket: bucket,
+      },
+    });
+  }
+
+  async put(key, data, encoding) {
+    return this.S3.putObject({
+      Key: key,
+      Body: encoding === 'base64' ? new Buffer(data, 'base64') : data,
+      ServerSideEncryption: 'AES256',
+    }).promise();
+  }
+
+  async get(key) {
+    const meta = await this.S3.getObject({
+      Key: key,
+    }).promise();
+
+    return meta.Body;
+  }
+}
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/logger.js
+```JS
+import fetch from 'node-fetch';
+
+export default class Logger {
+  constructor(cmd, namespace, credentials = {}) {
+    this.command = cmd;
+    this.namespace = namespace;
+    this.credentials = credentials;
+  }
+
+  async publish(json) {
+    if (this.credentials.clientId && this.credentials.secret) {
+      await fetch('https://log.codebox.sh/v1/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.credentials.clientId}:${this.credentials.secret}`,
+        },
+        body: JSON.stringify(json),
+      });
+    }
+  }
+
+  async error(user, { stack, message }) {
+    const json = {
+      user,
+      timestamp: new Date(),
+      level: 'error',
+      namespace: `error:${this.namespace}`,
+      command: this.command,
+      body: {
+        message,
+        stack,
+      },
+    };
+
+    return this.publish(json);
+  }
+
+  async info(user, message) {
+    const json = {
+      user,
+      timestamp: new Date(),
+      level: 'info',
+      namespace: `info:${this.namespace}`,
+      command: this.command,
+      body: message,
+    };
+
+    return this.publish(json);
+  }
+}
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/npm.js
+```JS
+import fetch from 'node-fetch';
+
+export default {
+  package: async (registry, name) => {
+    const response = await fetch(`${registry}${name}`);
+
+    if (!response.ok) {
+      const error = new Error(`Could Not Find Package: ${registry}${name}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.json();
+  },
+  tar: async (registry, name) => {
+    const response = await fetch(`${registry}${name}`);
+
+    if (!response.ok) {
+      const error = new Error(`Could Not Find Tar: ${registry}${name}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.buffer();
+  },
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/.serverless_plugins/codebox-tools/index.js
+```JS
+const fetch = require('node-fetch');
+
+class CodeboxTools {
+  constructor(serverless, options) {
+    this.options = options;
+    this.serverless = serverless;
+    this.provider = this.serverless.getProvider('aws');
+    this.s3 = new this.provider.sdk.S3({
+      signatureVersion: 'v4',
+    });
+
+    this.bucket = this.serverless.service.resources
+      .Resources
+      .PackageStorage
+      .Properties
+      .BucketName;
+
+    this.commands = {
+      codebox: {
+        usage: 'Useful tools provided by Codebox',
+        commands: {
+          domain: {
+            usage: 'Update packages and migrate to a new domain.',
+            lifecycleEvents: [
+              'migrate',
+            ],
+            options: {
+              host: {
+                usage: 'New host only e.g. example.com',
+                shortcut: 'h',
+                required: true,
+              },
+            },
+          },
+          encrypt: {
+            usage: 'Re-encrypts all files within package storage.',
+            lifecycleEvents: [
+              'encrypt',
+            ],
+          },
+          index: {
+            usage: 'Re-indexes all packages into Codebox Insights, license required.',
+            lifecycleEvents: [
+              'index',
+            ],
+            options: {
+              clientId: {
+                usage: 'Client id for your account.',
+                shortcut: 'c',
+                required: true,
+              },
+              secret: {
+                usage: 'Secret for your account.',
+                shortcut: 's',
+                required: true,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    this.hooks = {
+      'codebox:domain:migrate': () => this.migrate(),
+      'codebox:index:index': () => this.index(),
+      'codebox:encrypt:encrypt': () => this.encrypt(),
+    };
+  }
+
+  _getObjects(token) {
+    return this.s3.listObjectsV2({
+      Bucket: this.bucket,
+      ContinuationToken: token,
+    })
+    .promise()
+    .then((data) => {
+      const objectPromises = [];
+
+      data.Contents.forEach((item) => {
+        objectPromises.push(
+          new Promise((resolve, reject) => {
+            this.s3.getObject({
+              Bucket: this.bucket,
+              Key: item.Key,
+            }).promise().then((obj) => {
+              resolve({
+                key: item.Key,
+                data: obj.Body,
+              });
+            }).catch(reject);
+          }));
+      });
+
+      if (data.IsTruncated) {
+        return this._getObjectPromises(data.NextContinuationToken);
+      }
+
+      return Promise.all(objectPromises);
+    });
+  }
+
+  encrypt() {
+    return this._getObjects()
+    .then((items) => {
+      const putPromises = [];
+
+      items.forEach((item) => {
+        putPromises.push(
+          this.s3.putObject({
+            Bucket: this.bucket,
+            Key: item.key,
+            Body: item.data,
+            ServerSideEncryption: 'AES256',
+          }).promise());
+      });
+
+      return putPromises;
+    }).then((promises) => {
+      return Promise.all(promises)
+      .then(() => this.serverless.cli.log('Encrypted all current files for registry'))
+    })
+    .catch(err => {
+      this.serverless.cli.log(`Failed file encryption migration ${err.message}`)
+    });
+  }
+
+  index() {
+    return this._getObjects()
+    .then((items) => {
+      const fetchPromises = [];
+
+      items.forEach((item) => {
+        if (item.key.indexOf('index.json') === -1) {
+          return;
+        }
+
+        const json = JSON.parse(item.data.toString());
+
+        const version = json.versions[
+          json['dist-tags'].latest
+        ];
+
+        const logBody = {
+          name: version.name,
+          description: version.description,
+          version: version.version,
+          keywords: version.keywords,
+          license: version.license,
+          contributors: version.contributors,
+          dependencies: version.dependencies,
+          homepage: version.homepage,
+          repository: version.repository,
+          'dist-tags': json['dist-tags'],
+        };
+
+        const reqBody = JSON.stringify({
+          timestamp: new Date(),
+          namespace: 'info:package:put',
+          level: 'info',
+          user: {
+            name: "Codebox",
+            avatar: "https://s3-eu-west-1.amazonaws.com/codebox-assets/logo.png",
+          },
+          credentials: {
+            clientId: this.options.clientId,
+            secret: this.options.secret,
+          },
+          body: logBody,
+        });
+
+        fetchPromises.push(fetch('https://log.codebox.sh/v1/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: reqBody,
+        }));
+      });
+
+      return Promise.all(fetchPromises);
+    })
+    .then((results) => {
+      const failed = results.filter(r => r.status !== 200);
+
+      if (failed.length > 0) {
+        this.serverless.cli.log(`Codebox indexing had ${failed.length} failures`);
+      }
+    })
+    .then(() => {
+      this.serverless.cli.log('Codebox Insights indexing tool completed');
+    })
+    .catch((err) => {
+      this.serverless.cli.log(`Codebox Insights indexing of data failed for ${this.options.clientId}`);
+      this.serverless.cli.log(err.message);
+    });
+  }
+
+  migrate() {
+    return this._getObjects()
+    .then((items) => {
+      const putPromises = [];
+
+      items.forEach((item) => {
+        if (item.key.indexOf('index.json') === -1) {
+          return;
+        }
+
+        const newItem = Object.assign({}, item);
+        const json = JSON.parse(newItem.data.toString());
+
+        Object.keys(json.versions).forEach((name) => {
+          const version = json.versions[name];
+
+          if (version.dist && version.dist.tarball) {
+            const currentHost = version.dist.tarball.split('/')[2];
+            const currentProtocol = version.dist.tarball.split('/')[0];
+
+            version.dist.tarball = version.dist.tarball
+              .replace(currentHost, this.options.host)
+              .replace(currentProtocol, 'https:');
+
+            json.versions[name] = version;
+          }
+        });
+
+        putPromises.push(
+          this.s3.putObject({
+            Bucket: this.bucket,
+            Key: newItem.key,
+            Body: JSON.stringify(json),
+          }).promise());
+      });
+
+      return Promise.all(putPromises);
+    })
+    .then(() => {
+      const lambda = new this.provider.sdk.Lambda({
+        signatureVersion: 'v4',
+        region: process.env.CODEBOX_REGION,
+      });
+
+      const serviceName = this.serverless.config.serverless.service.service;
+      const stage = this.options.stage;
+
+      const deployedName = `${serviceName}-${stage}-put`;
+
+      const params = {
+        FunctionName: deployedName,
+      };
+
+      return lambda
+      .getFunctionConfiguration(params)
+      .promise()
+      .then((config) => {
+        const env = config.Environment;
+        const currentEndpoint = env.Variables.apiEndpoint;
+
+        if (!currentEndpoint) {
+          throw new Error('Please ensure you are on Codebox npm 0.20.0 or higher.');
+        }
+
+        let endpoint = currentEndpoint.replace(currentEndpoint.split('/')[2], this.options.host);
+        if (this.options.path) {
+          endpoint = `${endpoint}${this.options.path}`
+        }
+
+        env.Variables = Object.assign({}, env.Variables, {
+          apiEndpoint: endpoint,
+        });
+
+        const updatedConfig = {
+          FunctionName: deployedName,
+          Environment: env,
+        };
+
+        return lambda
+        .updateFunctionConfiguration(updatedConfig)
+        .promise();
+      });
+    })
+    .then(() => {
+      this.serverless.cli.log(`Domain updated for ${this.options.host}`);
+    })
+    .catch((err) => {
+      this.serverless.cli.log(`Domain update failed for ${this.options.host}`);
+      this.serverless.cli.log(err.message);
+    });
+  }
+}
+
+module.exports = CodeboxTools;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/.serverless_plugins/remove-storage/index.js
+```JS
+class RemoveStorageBucket {
+  constructor(serverless) {
+    this.serverless = serverless;
+    this.provider = this.serverless.getProvider('aws');
+
+    const profile = this.serverless
+    .config
+    .serverless
+    .service
+    .provider
+    .profile;
+
+    if (profile) {
+      const credentials = new this.provider.sdk.SharedIniFileCredentials({
+        profile,
+      });
+
+      this.provider.sdk.config.credentials = credentials;
+    }
+
+    this.s3 = new this.provider.sdk.S3({
+      signatureVersion: 'v4',
+    });
+
+    this.bucket = this.serverless.service.resources
+      .Resources
+      .PackageStorage
+      .Properties
+      .BucketName;
+
+    this.hooks = {
+      'before:remove:remove': this.beforeRemove.bind(this),
+    };
+  }
+
+  listAllKeys(token) {
+    const allKeys = [];
+    return this.s3.listObjectsV2({
+      Bucket: this.bucket,
+      ContinuationToken: token,
+    })
+    .promise()
+    .then((data) => {
+      allKeys.push(data.Contents);
+
+      if (data.IsTruncated) {
+        return this.listAllKeys(data.NextContinuationToken);
+      }
+
+      return [].concat(...allKeys).map(({ Key }) => ({ Key }));
+    });
+  }
+
+  beforeRemove() {
+    return new Promise((resolve, reject) => {
+      return this.listAllKeys()
+      .then((keys) => {
+        if (keys.length > 0) {
+          return this.s3
+          .deleteObjects({
+            Bucket: this.bucket,
+            Delete: {
+              Objects: keys,
+            },
+          }).promise();
+        }
+
+        return true;
+      })
+      .then(() => {
+        return this.s3
+        .deleteBucket({
+          Bucket: this.bucket,
+        }).promise()
+        .then(() => {
+          this.serverless.cli.log('AWS Package Storage Removed');
+          resolve();
+        });
+      })
+      .catch((err) => {
+        this.serverless.cli.log(`Could not remove AWS package storage: ${err.message}`);
+        reject(err);
+      });
+    });
+  }
+}
+
+module.exports = RemoveStorageBucket;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/tar/get.js
+```JS
+import npm from '../adapters/npm';
+import S3 from '../adapters/s3';
+
+export default async (event, context, callback) => {
+  const { registry, bucket, region } = process.env;
+  const storage = new S3({ region, bucket });
+
+  const name = `${decodeURIComponent(event.name)}`;
+  const tarName = `${decodeURIComponent(event.tar)}`;
+
+  try {
+    const fileName = tarName.replace(`${name}-`, '');
+    const pkgBuffer = await storage.get(`${name}/${fileName}`);
+
+    return callback(null, pkgBuffer.toString('base64'));
+  } catch (storageError) {
+    if (storageError.code === 'NoSuchKey') {
+      try {
+        const npmPkgBuffer = await npm.tar(registry, `${event.name}/-/${event.tar}`);
+        return callback(null, npmPkgBuffer.toString('base64'));
+      } catch (npmError) {
+        return callback(npmError);
+      }
+    }
+
+    return callback(storageError);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/delete.js
+```JS
+import S3 from '../adapters/s3';
+import Logger from '../adapters/logger';
+
+export default async ({
+  requestContext,
+  pathParameters,
+}, context, callback) => {
+  const { bucket, region, logTopic } = process.env;
+  const user = {
+    name: requestContext.authorizer.username,
+    avatar: requestContext.authorizer.avatar,
+  };
+  const storage = new S3({ region, bucket });
+  const log = new Logger('dist-tags:delete', { region, topic: logTopic });
+
+  const name = `${decodeURIComponent(pathParameters.name)}`;
+
+  try {
+    const pkgBuffer = await storage.get(`${name}/index.json`);
+    const json = JSON.parse(pkgBuffer.toString());
+    delete json['dist-tags'][pathParameters.tag];
+
+    await storage.put(
+      `${name}/index.json`,
+      JSON.stringify(json),
+    );
+
+    await log.info(user, {
+      name: json.name,
+      tag: pathParameters.tag,
+      'dist-tags': json['dist-tags'],
+    });
+
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        ok: true,
+        id: pathParameters.name,
+        'dist-tags': json['dist-tags'],
+      }),
+    });
+  } catch (storageError) {
+    await log.error(user, storageError);
+
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        ok: false,
+        error: storageError.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/get.js
+```JS
+import npm from '../adapters/npm';
+import S3 from '../adapters/s3';
+import Logger from '../adapters/logger';
+
+export default async ({
+  requestContext,
+  pathParameters,
+}, context, callback) => {
+  const { registry, bucket, region, logTopic } = process.env;
+  const user = {
+    name: requestContext.authorizer.username,
+    avatar: requestContext.authorizer.avatar,
+  };
+  const storage = new S3({ region, bucket });
+  const log = new Logger('dist-tags:get', { region, topic: logTopic });
+
+  const name = `${decodeURIComponent(pathParameters.name)}`;
+
+  try {
+    const pkgBuffer = await storage.get(`${name}/index.json`);
+    const json = JSON.parse(pkgBuffer.toString());
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify(json['dist-tags']),
+    });
+  } catch (storageError) {
+    if (storageError.code === 'NoSuchKey') {
+      try {
+        const data = await npm.package(registry, name);
+        return callback(null, {
+          statusCode: 200,
+          body: JSON.stringify(data['dist-tags']),
+        });
+      } catch ({ message }) {
+        return callback(null, {
+          statusCode: 404,
+          body: JSON.stringify({
+            ok: false,
+            error: message,
+          }),
+        });
+      }
+    }
+
+    await log.error(user, storageError);
+
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        ok: false,
+        error: storageError.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/put.js
+```JS
+import S3 from '../adapters/s3';
+import Logger from '../adapters/logger';
+
+export default async ({
+  requestContext,
+  body,
+  pathParameters,
+}, context, callback) => {
+  const { bucket, region, logTopic } = process.env;
+  const user = {
+    name: requestContext.authorizer.username,
+    avatar: requestContext.authorizer.avatar,
+  };
+  const storage = new S3({ region, bucket });
+  const log = new Logger('dist-tags:put', { region, topic: logTopic });
+
+  const name = `${decodeURIComponent(pathParameters.name)}`;
+
+  try {
+    const pkgBuffer = await storage.get(`${name}/index.json`);
+    const json = JSON.parse(pkgBuffer.toString());
+    const version = body.replace(/"/g, '');
+
+    json['dist-tags'][pathParameters.tag] = version;
+
+    await storage.put(
+      `${name}/index.json`,
+      JSON.stringify(json),
+    );
+
+    await log.info(user, {
+      name: json.name,
+      tag: pathParameters.tag,
+      version,
+      'dist-tags': json['dist-tags'],
+    });
+
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        ok: true,
+        id: pathParameters.name,
+        'dist-tags': json['dist-tags'],
+      }),
+    });
+  } catch (storageError) {
+    await log.error(user, storageError);
+
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        ok: false,
+        error: storageError.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/get/lib.js
+```JS
+export default async ({ pathParameters }, {
+  registry,
+  user,
+  storage,
+  npm,
+  log,
+}, callback) => {
+  const name = `${decodeURIComponent(pathParameters.name)}`;
+
+  try {
+    const pkgBuffer = await storage.get(`${name}/index.json`);
+    const json = JSON.parse(pkgBuffer.toString());
+    json._attachments = {}; // eslint-disable-line no-underscore-dangle
+
+    const version = json['dist-tags'].latest;
+
+    await log.info(user, {
+      name: json.name,
+      version,
+    });
+
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify(json),
+    });
+  } catch (storageError) {
+    if (storageError.code === 'NoSuchKey') {
+      try {
+        const json = await npm.package(registry, pathParameters.name);
+
+        const version = json['dist-tags'].latest;
+
+        await log.info(user, {
+          name: json.name,
+          version,
+        });
+
+        return callback(null, {
+          statusCode: 200,
+          body: JSON.stringify(json),
+        });
+      } catch (npmError) {
+        if (npmError.status === 500) {
+          await log.error(user, npmError);
+        }
+
+        return callback(null, {
+          statusCode: npmError.status,
+          body: JSON.stringify({
+            error: npmError.message,
+          }),
+        });
+      }
+    }
+
+    await log.error(user, storageError);
+
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        error: storageError.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/get/index.js
+```JS
+import lib from './lib';
+import contextFactory from '../contextFactory';
+
+export default async (event, _, callback) => {
+  lib(
+    event,
+    contextFactory(
+      'package:get',
+      event,
+    ),
+    callback,
+  );
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/user/delete.js
+```JS
+import url from 'url';
+import GitHub from '@octokit/rest';
+
+export default async ({ pathParameters }, context, callback) => {
+  const {
+    token,
+  } = pathParameters;
+
+  const parsedUrl = url.parse(process.env.githubUrl);
+  const github = new GitHub({
+    host: parsedUrl.host,
+    protocol: 'https',
+    pathPrefix: parsedUrl.path,
+  });
+
+  github.authenticate({
+    type: 'basic',
+    username: process.env.githubClientId,
+    password: process.env.githubSecret,
+  });
+
+  try {
+    await github.authorization.reset({
+      client_id: process.env.githubClientId,
+      access_token: token,
+    });
+
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        ok: true,
+      }),
+    });
+  } catch (err) {
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        ok: false,
+        error: err.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/user/put.js
+```JS
+import url from 'url';
+import GitHub from '@octokit/rest';
+
+export default async ({ body }, context, callback) => {
+  const {
+    name,
+    password,
+  } = JSON.parse(body);
+
+  const scopes = ['user:email'];
+
+  if (process.env.restrictedOrgs) {
+    scopes.push('read:org');
+  }
+
+  const nameParts = name.split('.');
+  const username = nameParts[0];
+  const otp = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+
+  const parsedUrl = url.parse(process.env.githubUrl);
+  const github = new GitHub({
+    host: parsedUrl.host,
+    protocol: 'https',
+    pathPrefix: parsedUrl.path,
+  });
+
+  github.authenticate({
+    type: 'basic',
+    username,
+    password,
+  });
+
+  let auth = {};
+  try {
+    auth = await github.authorization.getOrCreateAuthorizationForApp({
+      scopes,
+      client_id: process.env.githubClientId,
+      client_secret: process.env.githubSecret,
+      note: 'codebox private npm registry',
+      headers: {
+        'X-GitHub-OTP': otp,
+      },
+    });
+
+    if (!auth.token.length) {
+      await github.authorization.delete({
+        id: auth.id,
+        headers: {
+          'X-GitHub-OTP': otp,
+        },
+      });
+
+      auth = await github.authorization.create({
+        scopes,
+        client_id: process.env.githubClientId,
+        client_secret: process.env.githubSecret,
+        note: 'codebox private npm registry',
+        headers: {
+          'X-GitHub-OTP': otp,
+        },
+      });
+    }
+
+    return callback(null, {
+      statusCode: 201,
+      body: JSON.stringify({
+        ok: true,
+        token: auth.token,
+      }),
+    });
+  } catch (error) {
+    return callback(null, {
+      statusCode: 403,
+      body: JSON.stringify({
+        ok: false,
+        error: error.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/publish.js
+```JS
+export default async ({
+  requestContext,
+  pathParameters,
+  body,
+}, {
+  registry,
+  apiEndpoint,
+  user,
+  storage,
+  npm,
+  log,
+}, callback) => {
+  // Ensure package has unique name on npm
+  try {
+    const data = await npm.package(
+      registry,
+      pathParameters.name,
+    );
+
+    if (data._id) { // eslint-disable-line no-underscore-dangle
+      return callback(null, {
+        statusCode: 403,
+        body: JSON.stringify({
+          success: false,
+          error: 'Your package name needs to be unique to the public npm registry.',
+        }),
+      });
+    }
+  } catch (npmError) {
+    if (npmError.status === 500) {
+      await log.error(user, npmError);
+
+      return callback(null, {
+        statusCode: npmError.status,
+        body: JSON.stringify({
+          success: false,
+          error: npmError.message,
+        }),
+      });
+    }
+  }
+
+  const name = `${decodeURIComponent(pathParameters.name)}`;
+  const pkg = JSON.parse(body);
+  const tag = Object.keys(pkg['dist-tags'])[0];
+  const version = pkg['dist-tags'][tag];
+  const versionData = pkg.versions[version];
+
+  const tarballFilename = encodeURIComponent(versionData.dist.tarball.split('/-/')[1]);
+  versionData.dist.tarball = `${apiEndpoint}/${pathParameters.name}/-/${tarballFilename}`;
+
+  let json = {};
+
+  try {
+    const pkgBuffer = await storage.get(`${name}/index.json`);
+    json = JSON.parse(pkgBuffer.toString());
+
+    if (json.versions[version]) {
+      return callback(null, {
+        statusCode: 403,
+        body: JSON.stringify({
+          success: false,
+          error: `You cannot publish over the previously published version ${version}.`,
+        }),
+      });
+    }
+
+    json['dist-tags'][tag] = version;
+    json._attachments = {}; // eslint-disable-line no-underscore-dangle
+    json._attachments[`${name}-${version}.tgz`] = pkg._attachments[`${name}-${version}.tgz`]; // eslint-disable-line no-underscore-dangle
+    json.versions[version] = versionData;
+  } catch (storageError) {
+    if (storageError.code === 'NoSuchKey') {
+      json = pkg;
+      json['dist-tags'].latest = version;
+    }
+  }
+
+  try {
+    await storage.put(
+      `${name}/${version}.tgz`,
+      json._attachments[`${name}-${version}.tgz`].data, // eslint-disable-line no-underscore-dangle
+      'base64',
+    );
+
+    await storage.put(
+      `${name}/index.json`,
+      JSON.stringify(json),
+    );
+
+    await log.info(user, {
+      name: versionData.name,
+      description: versionData.description,
+      version,
+      keywords: versionData.keywords,
+      license: versionData.license,
+      contributors: versionData.contributors,
+      dependencies: versionData.dependencies,
+      homepage: versionData.homepage,
+      repository: versionData.repository,
+      'dist-tags': json['dist-tags'],
+    });
+
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+      }),
+    });
+  } catch (putError) {
+    await log.error(user, putError);
+
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        success: false,
+        error: putError.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/deprecate.js
+```JS
+export default async ({
+  requestContext,
+  pathParameters,
+  body,
+}, {
+  registry,
+  user,
+  storage,
+  npm,
+  log,
+}, callback) => {
+  const name = `${decodeURIComponent(pathParameters.name)}`;
+
+  try {
+    await storage.put(
+      `${name}/index.json`,
+      body.toString(),
+    );
+
+    return callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+      }),
+    });
+  } catch (putError) {
+    await log.error(user, putError);
+
+    return callback(null, {
+      statusCode: 500,
+      body: JSON.stringify({
+        success: false,
+        error: putError.message,
+      }),
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/index.js
+```JS
+import deprecate from './deprecate';
+import publish from './publish';
+import contextFactory from '../contextFactory';
+
+export default async (event, _, callback) => {
+  const context = contextFactory(
+    'package:put',
+    event,
+  );
+
+  if (context.command.name === 'deprecate') {
+    return deprecate(
+      event,
+      context,
+      callback,
+    );
+  }
+
+  return publish(
+    event,
+    context,
+    callback,
+  );
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/whoami/get.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import subject from '../../src/whoami/get';
+
+describe('GET /registry/-/whoami', () => {
+  let event;
+  let callback;
+
+  beforeEach(() => {
+    callback = stub();
+  });
+
+  describe('whoami', () => {
+    beforeEach(() => {
+      event = {
+        requestContext: {
+          authorizer: {
+            username: 'foobar',
+          },
+        },
+      };
+    });
+
+    it('should return correct username', async () => {
+      await subject(event, stub(), callback);
+
+      assert(callback.calledWithExactly(null, {
+        statusCode: 200,
+        body: '{"username":"foobar"}',
+      }));
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/npm.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import subject from '../../src/adapters/npm';
+
+describe('NPM', () => {
+  describe('#tar()', () => {
+    context('does not exist', () => {
+      let fetchStub;
+
+      beforeEach(() => {
+        fetchStub = stub().returns({
+          ok: false,
+          status: 404,
+        });
+
+        subject.__Rewire__('fetch', fetchStub);
+      });
+
+      it('throw correct error', async () => {
+        try {
+          await subject.tar(
+            'https://example.com/',
+            'foo-tar',
+          );
+        } catch (error) {
+          assert.equal(error.status, 404);
+          assert.equal(error.message, 'Could Not Find Tar: https://example.com/foo-tar');
+        }
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('fetch');
+      });
+    });
+
+    context('exists', () => {
+      const expected = new Buffer('foo');
+      let fetchStub;
+
+      beforeEach(() => {
+        fetchStub = stub().returns({
+          ok: true,
+          buffer: () => Promise.resolve(expected),
+        });
+
+        subject.__Rewire__('fetch', fetchStub);
+      });
+
+      it('should return buffer', async () => {
+        const actual = await subject.tar(
+          'https://example.com',
+          'foo-package',
+        );
+
+        assert.equal(actual, expected);
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('fetch');
+      });
+    });
+  });
+
+  describe('#package()', () => {
+    context('does not exist', () => {
+      let fetchStub;
+
+      beforeEach(() => {
+        fetchStub = stub().returns({
+          ok: false,
+          status: 404,
+        });
+
+        subject.__Rewire__('fetch', fetchStub);
+      });
+
+      it('throw correct error', async () => {
+        try {
+          await subject.package(
+            'https://example.com/',
+            'foo-package',
+          );
+        } catch (error) {
+          assert.equal(error.status, 404);
+          assert.equal(error.message, 'Could Not Find Package: https://example.com/foo-package');
+        }
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('fetch');
+      });
+    });
+
+    context('exists', () => {
+      const expected = { name: 'foo-package' };
+      let fetchStub;
+
+      beforeEach(() => {
+        fetchStub = stub().returns({
+          ok: true,
+          json: () => Promise.resolve(expected),
+        });
+
+        subject.__Rewire__('fetch', fetchStub);
+      });
+
+      it('should return json', async () => {
+        const actual = await subject.package(
+          'https://example.com',
+          'foo-package',
+        );
+
+        assert.equal(actual, expected);
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('fetch');
+      });
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/logger.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import Subject from '../../src/adapters/logger';
+
+describe('Logger', () => {
+  let user;
+  let clock;
+  let fetchStub;
+
+  beforeEach(() => {
+    user = {
+      name: 'foo',
+      avatar: 'https://example.com',
+    };
+
+    fetchStub = stub();
+
+    clock = useFakeTimers();
+
+    Subject.__Rewire__('fetch', fetchStub);
+  });
+
+  describe('#info()', () => {
+    it('should call insights logging endpoint  with correct parameters', async () => {
+      const subject = new Subject({ name: 'foo', args: [] }, 'foo:bar', {
+        clientId: 'foo-client-id',
+        secret: 'bar-secret',
+      });
+
+      await subject.info(user, { foo: 'bar' });
+
+      assert(fetchStub.calledWithExactly('https://log.codebox.sh/v1/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer foo-client-id:bar-secret',
+        },
+        body: '{"user":{"name":"foo","avatar":"https://example.com"},"timestamp":"1970-01-01T00:00:00.000Z","level":"info","namespace":"info:foo:bar","command":{"name":"foo","args":[]},"body":{"foo":"bar"}}',
+      }));
+    });
+  });
+
+  describe('#error()', () => {
+    it('should call insights logging endpoint  with correct parameters', async () => {
+      const subject = new Subject({ name: 'foo', args: [] }, 'foo:bar', {
+        clientId: 'foo-client-id',
+        secret: 'bar-secret',
+      });
+
+      const expectedError = new Error('Foo Bar');
+      expectedError.stack = 'foo bar stack';
+
+      await subject.error(user, expectedError);
+
+      assert(fetchStub.calledWithExactly('https://log.codebox.sh/v1/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer foo-client-id:bar-secret',
+        },
+        body: '{"user":{"name":"foo","avatar":"https://example.com"},"timestamp":"1970-01-01T00:00:00.000Z","level":"error","namespace":"error:foo:bar","command":{"name":"foo","args":[]},"body":{"message":"Foo Bar","stack":"foo bar stack"}}',
+      }));
+    });
+  });
+
+  afterEach(() => {
+    clock.restore();
+    Subject.__ResetDependency__('fetch');
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/s3.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
+import Subject from '../../src/adapters/s3';
+
+describe('S3', () => {
+  let awsSpy;
+  let putObjectStub;
+  let getObjectStub;
+
+  beforeEach(() => {
+    awsSpy = {
+      S3: spy(() => {
+        getObjectStub = stub().returns({ promise: () => Promise.resolve() });
+        putObjectStub = stub().returns({ promise: () => Promise.resolve() });
+
+        const awsS3Instance = createStubInstance(AWS.S3);
+        awsS3Instance.putObject = putObjectStub;
+        awsS3Instance.getObject = getObjectStub;
+
+        return awsS3Instance;
+      }),
+    };
+
+    Subject.__Rewire__('AWS', awsSpy);
+  });
+
+  describe('#put()', () => {
+    context('base64', () => {
+      it('should call AWS with correct parameters', async () => {
+        const subject = new Subject({
+          region: 'foo-region',
+          bucket: 'bar-bucket',
+        });
+
+        await subject.put('foo-key', 'test', 'base64');
+
+        assert(putObjectStub.calledWithExactly({
+          Key: 'foo-key',
+          Body: new Buffer('test', 'base64'),
+          ServerSideEncryption: 'AES256',
+        }));
+      });
+    });
+
+    context('string', () => {
+      it('should call AWS with correct parameters', async () => {
+        const subject = new Subject({
+          region: 'foo-region',
+          bucket: 'bar-bucket',
+        });
+
+        await subject.put('foo-key', 'test');
+
+        assert(putObjectStub.calledWithExactly({
+          Key: 'foo-key',
+          Body: 'test',
+          ServerSideEncryption: 'AES256',
+        }));
+      });
+    });
+  });
+
+  afterEach(() => {
+    Subject.__ResetDependency__('AWS');
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/serverless_plugins/remove-storage/index.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
+import RemoveStorageBucket from '../../../.serverless_plugins/remove-storage';
+
+describe('Plugin: RemoveStorageBucket', () => {
+  const createServerlessStub = (
+    SharedIniFileCredentials,
+    S3,
+    log,
+  ) => ({
+    config: {
+      serverless: {
+        service: {
+          provider: {
+            profile: 'foo',
+          },
+        },
+      },
+    },
+    getProvider: () => ({
+      sdk: {
+        S3,
+        SharedIniFileCredentials,
+        config: {},
+      },
+    }),
+    cli: {
+      log,
+    },
+    service: {
+      resources: {
+        Resources: {
+          PackageStorage: {
+            Properties: {
+              BucketName: 'foo-bucket',
+            },
+          },
+        },
+      },
+    },
+  });
+
+  describe('#beforeRemove()', () => {
+    context('has no keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let deleteBucketStub;
+      let deleteObjectsStub;
+      let listObjectsStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          stub(),
+          spy(() => {
+            deleteBucketStub = stub().returns({
+              promise: () => Promise.resolve(),
+            });
+
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [],
+              }),
+            });
+
+            deleteObjectsStub = stub().returns({
+              promise: () => Promise.resolve(),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.deleteBucket = deleteBucketStub;
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+            awsS3Instance.deleteObjects = deleteObjectsStub;
+
+            return awsS3Instance;
+          }), serverlessLogStub);
+
+        subject = new RemoveStorageBucket(serverlessStub);
+      });
+
+      it('should list keys correctly', async () => {
+        await subject.beforeRemove();
+
+        assert(listObjectsStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          ContinuationToken: undefined,
+        }));
+      });
+
+      it('should not call delete objects', async () => {
+        await subject.beforeRemove();
+
+        assert(!deleteObjectsStub.called);
+      });
+    });
+
+    context('has keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let deleteBucketStub;
+      let deleteObjectsStub;
+      let listObjectsStub;
+      let fileCredentialsStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        fileCredentialsStub = stub();
+        serverlessStub = createServerlessStub(
+          fileCredentialsStub,
+          spy(() => {
+            deleteBucketStub = stub().returns({
+              promise: () => Promise.resolve(),
+            });
+
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [{
+                  Key: 'foo',
+                },
+                {
+                  Key: 'bar',
+                }],
+              }),
+            });
+
+            deleteObjectsStub = stub().returns({
+              promise: () => Promise.resolve(),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.deleteBucket = deleteBucketStub;
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+            awsS3Instance.deleteObjects = deleteObjectsStub;
+
+            return awsS3Instance;
+          }), serverlessLogStub);
+
+        subject = new RemoveStorageBucket(serverlessStub);
+      });
+
+      it('should set credentials correctly', async () => {
+        await subject.beforeRemove();
+
+        assert(fileCredentialsStub.calledWithExactly({
+          profile: 'foo',
+        }));
+      });
+
+      it('should list keys correctly', async () => {
+        await subject.beforeRemove();
+
+        assert(listObjectsStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          ContinuationToken: undefined,
+        }));
+      });
+
+      it('should delete objects correctly', async () => {
+        await subject.beforeRemove();
+
+        assert(deleteObjectsStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          Delete: {
+            Objects: [{
+              Key: 'foo',
+            },
+            {
+              Key: 'bar',
+            }],
+          },
+        }));
+      });
+
+      it('should call aws delete bucket correctly', async () => {
+        await subject.beforeRemove();
+
+        assert(deleteBucketStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+        }));
+      });
+
+      it('should log it was a success', async () => {
+        await subject.beforeRemove();
+
+        assert(serverlessLogStub.calledWithExactly('AWS Package Storage Removed'));
+      });
+    });
+
+    context('error', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let listObjectsStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          stub(),
+          spy(() => {
+            listObjectsStub = stub().returns({
+              promise: () => Promise.reject(new Error('Removal Error')),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+
+            return awsS3Instance;
+          }), serverlessLogStub);
+
+        subject = new RemoveStorageBucket(serverlessStub);
+      });
+
+      it('should log error correctly', async () => {
+        try {
+          await subject.beforeRemove();
+        } catch (err) {
+          assert(serverlessLogStub.calledWithExactly('Could not remove AWS package storage: Removal Error'));
+        }
+      });
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/serverless_plugins/codebox-tools/index.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
+import CodeboxTools from '../../../.serverless_plugins/codebox-tools';
+
+describe('Plugin: CodeboxTools', () => {
+  const createServerlessStub = (S3, Lambda, log) => ({
+    getProvider: () => ({
+      sdk: {
+        S3,
+        Lambda,
+      },
+    }),
+    cli: {
+      log,
+    },
+    config: {
+      serverless: {
+        service: {
+          service: 'foo-service',
+        },
+      },
+    },
+    service: {
+      resources: {
+        Resources: {
+          PackageStorage: {
+            Properties: {
+              BucketName: 'foo-bucket',
+            },
+          },
+        },
+      },
+    },
+  });
+
+  describe('#index()', () => {
+    context('has no keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let listObjectsStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [],
+              }),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+
+            return awsS3Instance;
+          }), stub(), serverlessLogStub);
+
+        subject = new CodeboxTools(serverlessStub, { host: 'bar' });
+      });
+
+      it('should request keys correctly', async () => {
+        await subject.index();
+
+        assert(listObjectsStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          ContinuationToken: undefined,
+        }));
+      });
+    });
+
+    context('has keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let listObjectsStub;
+      let getObjectStub;
+      let fetchStub;
+      let clock;
+
+      beforeEach(() => {
+        clock = useFakeTimers();
+        fetchStub = stub();
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [{
+                  Key: 'foo/index.json',
+                }],
+              }),
+            });
+
+            getObjectStub = stub().returns({
+              promise: () => Promise.resolve({
+                Body: new Buffer('{"dist-tags":{"latest":"1.0.0"},"versions":{"1.0.0":{"name":"foo", "dist":{"tarball":"http://old-host/registry/foo/-/bar-1.0.0.tgz"}}}}'),
+              }),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+            awsS3Instance.getObject = getObjectStub;
+
+            return awsS3Instance;
+          }), stub(), serverlessLogStub);
+
+        subject = new CodeboxTools(serverlessStub, { host: 'example.com' });
+
+        CodeboxTools.__Rewire__('fetch', fetchStub);
+      });
+
+      it('should call index endpoint correctly', async () => {
+        await subject.index();
+
+        assert(fetchStub.calledWithExactly('https://log.codebox.sh/v1/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: '{"timestamp":"1970-01-01T00:00:00.000Z","namespace":"info:package:put","level":"info","user":{"name":"Codebox","avatar":"https://s3-eu-west-1.amazonaws.com/codebox-assets/logo.png"},"credentials":{},"body":{"name":"foo","dist-tags":{"latest":"1.0.0"}}}',
+        }));
+      });
+
+      afterEach(() => {
+        clock.restore();
+        CodeboxTools.__ResetDependency__('fetch');
+      });
+    });
+  });
+  describe('#encrypt()', () => {
+    context('keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let putObjectStub;
+      let listObjectsStub;
+      let getObjectStub;
+      let mockData;
+
+      beforeEach(() => {
+        mockData = new Buffer('{"versions":{"1.0.0":{"name":"foo", "dist":{"tarball":"http://old-host/registry/foo/-/bar-1.0.0.tgz"}}}}');
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            putObjectStub = stub().returns({
+              promise: () => Promise.resolve(),
+            });
+
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [{
+                  Key: 'foo/index.json',
+                }],
+              }),
+            });
+
+            getObjectStub = stub().returns({
+              promise: () => Promise.resolve({
+                Body: mockData,
+              }),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+            awsS3Instance.putObject = putObjectStub;
+            awsS3Instance.getObject = getObjectStub;
+
+            return awsS3Instance;
+          }),
+          stub(),
+          serverlessLogStub,
+        );
+
+        subject = new CodeboxTools(serverlessStub, {
+          host: 'example.com',
+          stage: 'test',
+          path: '/foo',
+        });
+      });
+
+      it('should store packages encrypted correctly', async () => {
+        await subject.encrypt();
+
+        assert(putObjectStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          Key: 'foo/index.json',
+          Body: mockData,
+          ServerSideEncryption: 'AES256',
+        }));
+      });
+    });
+
+    context('error', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let listObjectsStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            listObjectsStub = stub().returns({
+              promise: () => Promise.reject(new Error('Foo')),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+
+            return awsS3Instance;
+          }), stub(), serverlessLogStub);
+
+        subject = new CodeboxTools(serverlessStub, { host: 'example.com' });
+      });
+
+      it('should log error correctly', async () => {
+        try {
+          await subject.encrypt();
+        } catch (err) {
+          assert(serverlessLogStub.calledWithExactly('Failed file encryption migration Foo'));
+        }
+      });
+    });
+  });
+
+  describe('#migrate()', () => {
+    context('has no keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let listObjectsStub;
+      let getFunctionConfigurationStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [],
+              }),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+
+            return awsS3Instance;
+          }), spy(() => {
+            getFunctionConfigurationStub = stub().returns({
+              promise: () => Promise.resolve({
+                Environment: {
+                  Variables: {
+                    apiEndpoint: 'https://example.com/test/registry',
+                  },
+                },
+              }),
+            });
+
+            const updateFunctionConfigurationStub = stub().returns({
+              promise: () => Promise.resolve({}),
+            });
+
+            const lambdaInstance = createStubInstance(AWS.Lambda);
+            lambdaInstance.getFunctionConfiguration = getFunctionConfigurationStub;
+            lambdaInstance.updateFunctionConfiguration = updateFunctionConfigurationStub;
+
+            return lambdaInstance;
+          }), serverlessLogStub);
+
+        subject = new CodeboxTools(serverlessStub, { host: 'bar', stage: 'test' });
+      });
+
+      it('should request keys correctly', async () => {
+        await subject.migrate();
+
+        assert(listObjectsStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          ContinuationToken: undefined,
+        }));
+      });
+    });
+
+    context('has keys', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let putObjectStub;
+      let listObjectsStub;
+      let getObjectStub;
+      let getFunctionConfigurationStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            putObjectStub = stub().returns({
+              promise: () => Promise.resolve(),
+            });
+
+            listObjectsStub = stub().returns({
+              promise: () => Promise.resolve({
+                IsTruncated: false,
+                Contents: [{
+                  Key: 'foo/index.json',
+                }],
+              }),
+            });
+
+            getObjectStub = stub().returns({
+              promise: () => Promise.resolve({
+                Body: new Buffer('{"versions":{"1.0.0":{"name":"foo", "dist":{"tarball":"http://old-host/registry/foo/-/bar-1.0.0.tgz"}}}}'),
+              }),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+            awsS3Instance.putObject = putObjectStub;
+            awsS3Instance.getObject = getObjectStub;
+
+            return awsS3Instance;
+          }), spy(() => {
+            getFunctionConfigurationStub = stub().returns({
+              promise: () => Promise.resolve({
+                Environment: {
+                  Variables: {
+                    apiEndpoint: 'https://example.com/test/registry',
+                  },
+                },
+              }),
+            });
+
+            const updateFunctionConfigurationStub = stub().returns({
+              promise: () => Promise.resolve({}),
+            });
+
+            const lambdaInstance = createStubInstance(AWS.Lambda);
+            lambdaInstance.getFunctionConfiguration = getFunctionConfigurationStub;
+            lambdaInstance.updateFunctionConfiguration = updateFunctionConfigurationStub;
+
+            return lambdaInstance;
+          }), serverlessLogStub);
+
+        subject = new CodeboxTools(serverlessStub, {
+          host: 'example.com',
+          stage: 'test',
+          path: '/foo',
+        });
+      });
+
+      it('should store updated packages correctly', async () => {
+        await subject.migrate();
+
+        assert(putObjectStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          Key: 'foo/index.json',
+          Body: '{"versions":{"1.0.0":{"name":"foo","dist":{"tarball":"https://example.com/registry/foo/-/bar-1.0.0.tgz"}}}}',
+        }));
+      });
+
+      it('should request keys correctly', async () => {
+        await subject.migrate();
+
+        assert(listObjectsStub.calledWithExactly({
+          Bucket: 'foo-bucket',
+          ContinuationToken: undefined,
+        }));
+      });
+    });
+
+    context('error', () => {
+      let subject;
+      let serverlessStub;
+      let serverlessLogStub;
+      let listObjectsStub;
+
+      beforeEach(() => {
+        serverlessLogStub = stub();
+        serverlessStub = createServerlessStub(
+          spy(() => {
+            listObjectsStub = stub().returns({
+              promise: () => Promise.reject(new Error('Domain Migration Error')),
+            });
+
+            const awsS3Instance = createStubInstance(AWS.S3);
+            awsS3Instance.listObjectsV2 = listObjectsStub;
+
+            return awsS3Instance;
+          }), stub(), serverlessLogStub);
+
+        subject = new CodeboxTools(serverlessStub, { host: 'example.com' });
+      });
+
+      it('should log error correctly', async () => {
+        try {
+          await subject.migrate();
+        } catch (err) {
+          assert(serverlessLogStub.calledWithExactly('Domain update failed for example.com'));
+        }
+      });
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/tar/get.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import Storage from '../../src/adapters/s3';
+import Logger from '../../src/adapters/logger';
+import subject from '../../src/tar/get';
+
+describe('GET /registry/{name}/-/{tar}', () => {
+  let event;
+  let callback;
+  let storageSpy;
+  let storageInstance;
+  let loggerInstance;
+  let loggerSpy;
+
+  beforeEach(() => {
+    const env = {
+      bucket: 'foo-bucket',
+      region: 'bar-region',
+      registry: 'https://example.com',
+    };
+
+    process.env = env;
+
+    loggerSpy = spy(() => {
+      loggerInstance = createStubInstance(Logger);
+
+      loggerInstance.info = stub();
+      loggerInstance.error = stub();
+
+      return loggerInstance;
+    });
+
+    event = {
+      name: 'foo-bar-package',
+      tar: 'foo-bar-package-1.0.0.tgz',
+    };
+
+    callback = stub();
+
+    subject.__Rewire__('Logger', loggerSpy);
+  });
+
+  context('tar exists in private registry', () => {
+    beforeEach(() => {
+      storageSpy = spy(() => {
+        storageInstance = createStubInstance(Storage);
+
+        storageInstance.get.returns(new Buffer('bar'));
+
+        return storageInstance;
+      });
+
+      subject.__Rewire__('S3', storageSpy);
+    });
+
+    it('should get package json from storage with correct key', async () => {
+      await subject(event, stub(), callback);
+
+      assert(storageInstance.get.calledWithExactly(
+        'foo-bar-package/1.0.0.tgz',
+      ));
+    });
+
+    it('should return base64 response', async () => {
+      await subject(event, stub(), callback);
+
+      assert(callback.calledWithExactly(
+        null,
+        'YmFy',
+      ));
+    });
+
+    afterEach(() => {
+      subject.__ResetDependency__('S3');
+    });
+  });
+
+  context('tar does not exist in private registry', () => {
+    let npmTarStub;
+
+    beforeEach(() => {
+      npmTarStub = stub().returns(
+        new Buffer('YmFy', 'base64'),
+      );
+
+      const mockNpm = {
+        tar: npmTarStub,
+      };
+
+      storageSpy = spy(() => {
+        storageInstance = createStubInstance(Storage);
+
+        const notFoundError = new Error('No such key.');
+        notFoundError.code = 'NoSuchKey';
+
+        storageInstance.get.throws(notFoundError);
+
+        return storageInstance;
+      });
+
+      subject.__Rewire__({
+        S3: storageSpy,
+        npm: mockNpm,
+      });
+    });
+
+    it('should fetch package json from npm', async () => {
+      await subject(event, stub(), callback);
+
+      assert(npmTarStub.calledWithExactly(
+        'https://example.com',
+        'foo-bar-package/-/foo-bar-package-1.0.0.tgz',
+      ));
+    });
+
+    it('should return base64 response', async () => {
+      await subject(event, stub(), callback);
+
+      assert(callback.calledWithExactly(
+        null,
+        'YmFy',
+      ));
+    });
+
+    afterEach(() => {
+      subject.__ResetDependency__('npm');
+      subject.__ResetDependency__('S3');
+    });
+  });
+
+  context('storage get errors', () => {
+    beforeEach(() => {
+      storageSpy = spy(() => {
+        storageInstance = createStubInstance(Storage);
+
+        storageInstance.get.throws(new Error('Storage error.'));
+
+        return storageInstance;
+      });
+
+      subject.__Rewire__('S3', storageSpy);
+    });
+
+    it('should return 500 response with error', async () => {
+      await subject(event, stub(), callback);
+
+      assert(callback.calledWithExactly(
+        new Error('Storage error.'),
+      ));
+    });
+
+    afterEach(() => {
+      subject.__ResetDependency__('S3');
+    });
+  });
+
+  afterEach(() => {
+    subject.__ResetDependency__('Logger');
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/get.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import Storage from '../../src/adapters/s3';
+import Logger from '../../src/adapters/logger';
+import pkg from '../fixtures/package';
+
+import subject from '../../src/dist-tags/get';
+
+describe('GET /registry/-/package/{name}/dist-tags', () => {
+  let event;
+  let callback;
+  let storageSpy;
+  let storageInstance;
+  let loggerInstance;
+  let loggerSpy;
+
+  beforeEach(() => {
+    const env = {
+      bucket: 'foo-bucket',
+      region: 'bar-region',
+      registry: 'https://example.com',
+    };
+
+    process.env = env;
+
+    loggerSpy = spy(() => {
+      loggerInstance = createStubInstance(Logger);
+
+      loggerInstance.info = stub();
+      loggerInstance.error = stub();
+
+      return loggerInstance;
+    });
+
+    event = {
+      requestContext: {
+        authorizer: {
+          username: 'foo',
+          avatar: 'https://example.com',
+        },
+      },
+      pathParameters: {
+        name: 'foo-bar-package',
+      },
+    };
+
+    callback = stub();
+
+    subject.__Rewire__('Logger', loggerSpy);
+  });
+
+  describe('dist-tags ls', () => {
+    context('package exists in private registry', () => {
+      beforeEach(() => {
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          storageInstance.get.returns(pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }));
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__('S3', storageSpy);
+      });
+
+      it('should get from storage with correct key', async () => {
+        await subject(event, stub(), callback);
+
+        assert(storageInstance.get.calledWithExactly(
+          'foo-bar-package/index.json',
+        ));
+      });
+
+      it('should return dist tags response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"latest":"1.0.0"}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('S3');
+      });
+    });
+
+    context('package does not exist in private registry or npm', () => {
+      let npmPackageStub;
+
+      beforeEach(() => {
+        npmPackageStub = stub().throws(new Error('No package on npm.'));
+        const mockNpm = {
+          package: npmPackageStub,
+        };
+
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          const notFoundError = new Error('No such key.');
+          notFoundError.code = 'NoSuchKey';
+
+          storageInstance.get.throws(notFoundError);
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__({
+          S3: storageSpy,
+          npm: mockNpm,
+        });
+      });
+
+      it('should return correct 404 response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 404,
+          body: '{"ok":false,"error":"No package on npm."}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('npm');
+        subject.__ResetDependency__('S3');
+      });
+    });
+
+    context('package does not exist in private registry', () => {
+      let npmPackageStub;
+
+      beforeEach(() => {
+        npmPackageStub = stub().returns(
+          JSON.parse(pkg.withoutAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }).toString()));
+
+        const mockNpm = {
+          package: npmPackageStub,
+        };
+
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          const notFoundError = new Error('No such key.');
+          notFoundError.code = 'NoSuchKey';
+
+          storageInstance.get.throws(notFoundError);
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__({
+          S3: storageSpy,
+          npm: mockNpm,
+        });
+      });
+
+      it('should fetch package json from npm', async () => {
+        await subject(event, stub(), callback);
+
+        assert(npmPackageStub.calledWithExactly(
+          'https://example.com',
+          'foo-bar-package',
+        ));
+      });
+
+      it('should return dist-tags json response from npm', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"latest":"1.0.0"}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('npm');
+        subject.__ResetDependency__('S3');
+      });
+    });
+
+    context('storage get errors', () => {
+      beforeEach(() => {
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          storageInstance.get.throws(new Error('Storage error.'));
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__('S3', storageSpy);
+      });
+
+      it('should return 500 response with error', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 500,
+          body: '{"ok":false,"error":"Storage error."}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('S3');
+      });
+    });
+  });
+
+  afterEach(() => {
+    subject.__ResetDependency__('Logger');
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/delete.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import Storage from '../../src/adapters/s3';
+import Logger from '../../src/adapters/logger';
+import pkg from '../fixtures/package';
+
+import subject from '../../src/dist-tags/delete';
+
+describe('DELETE registry/-/package/{name}/dist-tags/{tag}', () => {
+  let event;
+  let callback;
+  let storageSpy;
+  let storageInstance;
+  let loggerSpy;
+  let loggerInstance;
+
+  beforeEach(() => {
+    const env = {
+      bucket: 'foo-bucket',
+      region: 'bar-region',
+    };
+
+    process.env = env;
+
+    loggerSpy = spy(() => {
+      loggerInstance = createStubInstance(Logger);
+
+      loggerInstance.info = stub();
+      loggerInstance.error = stub();
+
+      return loggerInstance;
+    });
+
+    event = {
+      requestContext: {
+        authorizer: {
+          username: 'foo',
+          avatar: 'https://example.com',
+        },
+      },
+      pathParameters: {
+        name: 'foo-bar-package',
+        tag: 'alpha',
+      },
+    };
+
+    callback = stub();
+
+    subject.__Rewire__('Logger', loggerSpy);
+  });
+
+  describe('dist-tags rm', () => {
+    context('package exists', () => {
+      beforeEach(() => {
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          const pkgDistTags = JSON.parse(pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }).toString());
+
+          pkgDistTags['dist-tags'].alpha = '1.0.0';
+
+          storageInstance.get.returns(
+            new Buffer(JSON.stringify(pkgDistTags)),
+          );
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__('S3', storageSpy);
+      });
+
+      it('should get from storage with correct key', async () => {
+        await subject(event, stub(), callback);
+
+        assert(storageInstance.get.calledWithExactly(
+          'foo-bar-package/index.json',
+        ));
+      });
+
+      it('should put updated package json into storage', async () => {
+        await subject(event, stub(), callback);
+
+        assert(storageInstance.put.calledWithExactly(
+          'foo-bar-package/index.json',
+          pkg.withAttachments({ major: 1, minor: 0, patch: 0 }).toString(),
+        ));
+      });
+
+      it('should return correct updated package json response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"ok":true,"id":"foo-bar-package","dist-tags":{"latest":"1.0.0"}}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('S3');
+      });
+    });
+
+    context('storage put errors', () => {
+      beforeEach(() => {
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          storageInstance.get.returns(pkg.withoutAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }));
+
+          storageInstance.put.throws(new Error('Storage error.'));
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__('S3', storageSpy);
+      });
+
+      it('should return 500 response with error', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 500,
+          body: '{"ok":false,"error":"Storage error."}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('S3');
+      });
+    });
+  });
+
+  afterEach(() => {
+    subject.__ResetDependency__('Logger');
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/put.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import Storage from '../../src/adapters/s3';
+import Logger from '../../src/adapters/logger';
+import pkg from '../fixtures/package';
+
+import subject from '../../src/dist-tags/put';
+
+describe('PUT registry/-/package/{name}/dist-tags/{tag}', () => {
+  let event;
+  let callback;
+  let storageSpy;
+  let storageInstance;
+  let loggerInstance;
+  let loggerSpy;
+
+  beforeEach(() => {
+    const env = {
+      bucket: 'foo-bucket',
+      region: 'bar-region',
+    };
+
+    process.env = env;
+
+    loggerSpy = spy(() => {
+      loggerInstance = createStubInstance(Logger);
+
+      loggerInstance.info = stub();
+      loggerInstance.error = stub();
+
+      return loggerInstance;
+    });
+
+    event = {
+      requestContext: {
+        authorizer: {
+          username: 'foo',
+          avatar: 'https://example.com',
+        },
+      },
+      pathParameters: {
+        name: 'foo-bar-package',
+        tag: 'foo',
+        // npm sends a quoted string for the version
+        // in the body for this call.
+      },
+      body: '"1.0.0"',
+    };
+
+    callback = stub();
+
+    subject.__Rewire__('Logger', loggerSpy);
+  });
+
+  describe('dist-tags add', () => {
+    context('package exists', () => {
+      beforeEach(() => {
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          const pkgDistTags = JSON.parse(pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }).toString());
+
+          storageInstance.get.returns(
+            new Buffer(JSON.stringify(pkgDistTags)),
+          );
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__('S3', storageSpy);
+      });
+
+      it('should get from storage with correct key', async () => {
+        await subject(event, stub(), callback);
+
+        assert(storageInstance.get.calledWithExactly(
+          'foo-bar-package/index.json',
+        ));
+      });
+
+      it('should put updated package json into storage', async () => {
+        await subject(event, stub(), callback);
+
+        const pkgInitial = JSON.parse(
+          pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }).toString(),
+        );
+
+        pkgInitial['dist-tags'] = Object.assign(
+          {},
+          pkgInitial['dist-tags'],
+          { foo: '1.0.0' },
+        );
+
+        const expected = JSON.stringify(pkgInitial);
+
+        assert(storageInstance.put.calledWithExactly(
+          'foo-bar-package/index.json',
+          expected,
+        ));
+      });
+
+      it('should return correct updated package json response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"ok":true,"id":"foo-bar-package","dist-tags":{"latest":"1.0.0","foo":"1.0.0"}}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('S3');
+      });
+    });
+
+    context('storage put errors', () => {
+      beforeEach(() => {
+        storageSpy = spy(() => {
+          storageInstance = createStubInstance(Storage);
+
+          storageInstance.get.returns(pkg.withoutAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }));
+
+          storageInstance.put.throws(new Error('Storage error.'));
+
+          return storageInstance;
+        });
+
+        subject.__Rewire__('S3', storageSpy);
+      });
+
+      it('should return 500 response with error', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 500,
+          body: '{"ok":false,"error":"Storage error."}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('S3');
+      });
+    });
+  });
+
+  afterEach(() => {
+    subject.__ResetDependency__('Logger');
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/get/lib.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import pkg from '../fixtures/package';
+
+import subject from '../../src/get/lib';
+
+describe('GET /registry/{name}', () => {
+  let event;
+  let callback;
+
+  beforeEach(() => {
+    event = {
+      requestContext: {
+        authorizer: {
+          username: 'foo',
+          avatar: 'https://example.com',
+        },
+      },
+      pathParameters: {
+        name: 'foo-bar-package',
+      },
+    };
+
+    callback = stub();
+  });
+
+  context('package does not exist in private registry', () => {
+    let npmStub;
+    let storageStub;
+
+    beforeEach(() => {
+      const npmPackageStub = stub().returns(
+        JSON.parse(pkg.withoutAttachments({
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }).toString()));
+
+      npmStub = {
+        package: npmPackageStub,
+      };
+
+      const notFoundError = new Error('Not Found');
+      notFoundError.code = 'NoSuchKey';
+
+      storageStub = {
+        get: stub().throws(notFoundError),
+      };
+    });
+
+    it('should fetch package json from npm', async () => {
+      await subject(event, {
+        registry: 'https://example.com',
+        user: stub(),
+        log: {
+          error: stub(),
+        },
+        npm: npmStub,
+        storage: storageStub,
+      }, callback);
+
+      assert(npmStub.package.calledWithExactly(
+        'https://example.com',
+        'foo-bar-package',
+      ));
+    });
+
+    it('should return package json response from npm', async () => {
+      await subject(event, {
+        registry: 'https://example.com',
+        user: stub(),
+        log: {
+          error: stub(),
+          info: stub(),
+        },
+        npm: npmStub,
+        storage: storageStub,
+      }, callback);
+
+      assert(callback.calledWithExactly(null, {
+        statusCode: 200,
+        body: pkg.withoutAttachments({
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }).toString(),
+      }));
+    });
+  });
+
+  context('package exists in private registry', () => {
+    let storageStub;
+
+    beforeEach(() => {
+      const getPackageStub = stub().returns(
+        pkg.withoutAttachments({
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }));
+
+      storageStub = {
+        get: getPackageStub,
+      };
+    });
+
+    it('should get package json from storage with correct key', async () => {
+      await subject(event, {
+        registry: 'https://example.com',
+        user: stub(),
+        log: {
+          error: stub(),
+        },
+        npm: stub(),
+        storage: storageStub,
+      }, callback);
+
+      assert(storageStub.get.calledWithExactly(
+        'foo-bar-package/index.json',
+      ));
+    });
+
+    it('should return package json response', async () => {
+      await subject(event, {
+        registry: 'https://example.com',
+        user: stub(),
+        log: {
+          error: stub(),
+          info: stub(),
+        },
+        npm: stub(),
+        storage: storageStub,
+      }, callback);
+
+      assert(callback.calledWithExactly(null, {
+        statusCode: 200,
+        body: pkg.withoutAttachments({
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }).toString(),
+      }));
+    });
+  });
+
+  context('npm errors', () => {
+    let npmStub;
+    let storageStub;
+
+    beforeEach(() => {
+      const npmError = new Error('npm Error');
+      npmError.status = 500;
+
+      npmStub = {
+        package: stub().throws(npmError),
+      };
+
+      const notFoundError = new Error('Not Found');
+      notFoundError.code = 'NoSuchKey';
+
+      storageStub = {
+        get: stub().throws(notFoundError),
+      };
+    });
+
+    it('should return correct status code and response with error', async () => {
+      await subject(event, {
+        registry: 'https://example.com',
+        user: stub(),
+        log: {
+          error: stub(),
+        },
+        npm: npmStub,
+        storage: storageStub,
+      }, callback);
+
+      assert(callback.calledWithExactly(null, {
+        statusCode: 500,
+        body: '{"error":"npm Error"}',
+      }));
+    });
+  });
+
+  context('storage get errors', () => {
+    let storageStub;
+
+    beforeEach(() => {
+      storageStub = {
+        get: stub().throws(new Error('Storage Error')),
+      };
+    });
+
+    it('should return 500 response with error', async () => {
+      await subject(event, {
+        registry: 'https://example.com',
+        user: stub(),
+        log: {
+          error: stub(),
+        },
+        npm: stub(),
+        storage: storageStub,
+      }, callback);
+
+      assert(callback.calledWithExactly(null, {
+        statusCode: 500,
+        body: '{"error":"Storage Error"}',
+      }));
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/user/delete.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import GitHub from '@octokit/rest';
+import subject from '../../src/user/delete';
+
+describe('DELETE /registry/-/user/token/{token}', () => {
+  let event;
+  let callback;
+  let gitHubSpy;
+  let gitHubInstance;
+
+  beforeEach(() => {
+    const env = {
+      githubClientId: 'foo-client-id',
+      githubSecret: 'bar-secret',
+      githubUrl: 'https://example.com',
+      restrictedOrgs: 'foo-org',
+    };
+
+    process.env = env;
+
+    callback = stub();
+  });
+
+  describe('logout', () => {
+    context('with valid token', () => {
+      let authStub;
+      let resetAuthStub;
+
+      beforeEach(() => {
+        event = {
+          pathParameters: {
+            token: 'foo-token',
+          },
+        };
+
+        gitHubSpy = spy(() => {
+          gitHubInstance = createStubInstance(GitHub);
+          authStub = stub();
+          resetAuthStub = stub();
+
+          gitHubInstance.authenticate = authStub;
+          gitHubInstance.authorization = {
+            reset: resetAuthStub,
+          };
+
+          return gitHubInstance;
+        });
+
+        subject.__Rewire__({
+          GitHub: gitHubSpy,
+        });
+      });
+
+      it('should authenticate using app credentials with github', async () => {
+        await subject(event, stub(), callback);
+
+        assert(authStub.calledWithExactly({
+          type: 'basic',
+          username: 'foo-client-id',
+          password: 'bar-secret',
+        }));
+      });
+
+      it('should reset token with github', async () => {
+        await subject(event, stub(), callback);
+
+        assert(resetAuthStub.calledWithExactly({
+          client_id: 'foo-client-id',
+          access_token: 'foo-token',
+        }));
+      });
+
+      it('should return 200 response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"ok":true}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('GitHub');
+      });
+    });
+
+    context('with invalid token', () => {
+      let authStub;
+      let resetAuthStub;
+
+      beforeEach(() => {
+        event = {
+          pathParameters: {
+            token: 'foo-bad-token',
+          },
+        };
+
+        gitHubSpy = spy(() => {
+          gitHubInstance = createStubInstance(GitHub);
+          authStub = stub();
+          resetAuthStub = stub().throws(new Error('Invalid token'));
+
+          gitHubInstance.authenticate = authStub;
+          gitHubInstance.authorization = {
+            reset: resetAuthStub,
+          };
+
+          return gitHubInstance;
+        });
+
+        subject.__Rewire__({
+          GitHub: gitHubSpy,
+        });
+      });
+
+      it('should authenticate using app credentials with github', async () => {
+        await subject(event, stub(), callback);
+
+        assert(authStub.calledWithExactly({
+          type: 'basic',
+          username: 'foo-client-id',
+          password: 'bar-secret',
+        }));
+      });
+
+      it('should return a 500 error', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 500,
+          body: '{"ok":false,"error":"Invalid token"}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('GitHub');
+      });
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/user/put.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import GitHub from '@octokit/rest';
+import subject from '../../src/user/put';
+
+describe('PUT /registry/-/user/{id}', () => {
+  let event;
+  let callback;
+  let gitHubSpy;
+  let gitHubInstance;
+
+  beforeEach(() => {
+    const env = {
+      githubClientId: 'foo-client-id',
+      githubSecret: 'bar-secret',
+      githubUrl: 'https://example.com',
+      restrictedOrgs: 'foo-org',
+    };
+
+    process.env = env;
+
+    callback = stub();
+  });
+
+  describe('login', () => {
+    context('with 2FA', () => {
+      let authStub;
+      let getCreateAuthStub;
+
+      beforeEach(() => {
+        event = {
+          pathParameters: {
+            id: 'foo-user.123456',
+          },
+          body: '{"name":"foo-user.123456","password":"bar-password"}',
+        };
+
+        gitHubSpy = spy(() => {
+          gitHubInstance = createStubInstance(GitHub);
+          getCreateAuthStub = stub().returns({ token: 'foo-token' });
+          authStub = stub();
+
+          gitHubInstance.authenticate = authStub;
+          gitHubInstance.authorization = {
+            getOrCreateAuthorizationForApp: getCreateAuthStub,
+          };
+
+          return gitHubInstance;
+        });
+
+        subject.__Rewire__({
+          GitHub: gitHubSpy,
+        });
+      });
+
+      it('should set credentials to authenticate with github api', async () => {
+        await subject(event, stub(), callback);
+
+        assert(authStub.calledWithExactly({
+          type: 'basic',
+          username: 'foo-user',
+          password: 'bar-password',
+        }));
+      });
+
+      it('should get or create authorization for app correctly with otp', async () => {
+        await subject(event, stub(), callback);
+
+        assert(getCreateAuthStub.calledWithExactly({
+          scopes: ['user:email', 'read:org'],
+          client_id: 'foo-client-id',
+          client_secret: 'bar-secret',
+          note: 'codebox private npm registry',
+          headers: {
+            'X-GitHub-OTP': '123456',
+          },
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('GitHub');
+      });
+    });
+
+    context('first time without 2FA', () => {
+      let authStub;
+      let getCreateAuthStub;
+
+      beforeEach(() => {
+        event = {
+          pathParameters: {
+            id: 'foo-user',
+          },
+          body: '{"name":"foo-user","password":"bar-password"}',
+        };
+
+        gitHubSpy = spy(() => {
+          gitHubInstance = createStubInstance(GitHub);
+          getCreateAuthStub = stub().returns({ token: 'foo-token' });
+          authStub = stub();
+
+          gitHubInstance.authenticate = authStub;
+          gitHubInstance.authorization = {
+            getOrCreateAuthorizationForApp: getCreateAuthStub,
+          };
+
+          return gitHubInstance;
+        });
+
+        subject.__Rewire__({
+          GitHub: gitHubSpy,
+        });
+      });
+
+      it('should set credentials to authenticate with github api', async () => {
+        await subject(event, stub(), callback);
+
+        assert(authStub.calledWithExactly({
+          type: 'basic',
+          username: 'foo-user',
+          password: 'bar-password',
+        }));
+      });
+
+      it('should get or create authorization for app correctly', async () => {
+        await subject(event, stub(), callback);
+
+        assert(getCreateAuthStub.calledWithExactly({
+          scopes: ['user:email', 'read:org'],
+          client_id: 'foo-client-id',
+          client_secret: 'bar-secret',
+          note: 'codebox private npm registry',
+          headers: {
+            'X-GitHub-OTP': '',
+          },
+        }));
+      });
+
+      it('should return correct status code and token response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 201,
+          body: '{"ok":true,"token":"foo-token"}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('GitHub');
+      });
+    });
+
+    context('logged in previously without 2FA', () => {
+      let authStub;
+      let getCreateAuthStub;
+      let createAuthStub;
+      let deleteAuthStub;
+
+      beforeEach(() => {
+        event = {
+          pathParameters: {
+            id: 'foo-user',
+          },
+          body: '{"name":"foo-user","password":"bar-password"}',
+        };
+
+        gitHubSpy = spy(() => {
+          gitHubInstance = createStubInstance(GitHub);
+
+          // GitHub does not return a token
+          // if you already have one assigned
+          getCreateAuthStub = stub().returns({ id: 'foo-user', token: '' });
+
+          authStub = stub();
+          deleteAuthStub = stub();
+          createAuthStub = stub().returns({ id: 'foo-user', token: 'new-foo-token' });
+
+          gitHubInstance.authenticate = authStub;
+          gitHubInstance.authorization = {
+            getOrCreateAuthorizationForApp: getCreateAuthStub,
+            delete: deleteAuthStub,
+            create: createAuthStub,
+          };
+
+          return gitHubInstance;
+        });
+
+        subject.__Rewire__({
+          GitHub: gitHubSpy,
+        });
+      });
+
+      it('should set credentials to authenticate with github api', async () => {
+        await subject(event, stub(), callback);
+
+        assert(authStub.calledWithExactly({
+          type: 'basic',
+          username: 'foo-user',
+          password: 'bar-password',
+        }));
+      });
+
+      it('should delete current token from github', async () => {
+        await subject(event, stub(), callback);
+
+        assert(deleteAuthStub.calledWithExactly({
+          id: 'foo-user',
+          headers: {
+            'X-GitHub-OTP': '',
+          },
+        }));
+      });
+
+      it('should create a new token against github app', async () => {
+        await subject(event, stub(), callback);
+
+        assert(createAuthStub.calledWithExactly({
+          scopes: ['user:email', 'read:org'],
+          client_id: 'foo-client-id',
+          client_secret: 'bar-secret',
+          note: 'codebox private npm registry',
+          headers: {
+            'X-GitHub-OTP': '',
+          },
+        }));
+      });
+
+      it('should attempts to get or create authorization for app correctly', async () => {
+        await subject(event, stub(), callback);
+
+        assert(getCreateAuthStub.calledWithExactly({
+          scopes: ['user:email', 'read:org'],
+          client_id: 'foo-client-id',
+          client_secret: 'bar-secret',
+          note: 'codebox private npm registry',
+          headers: {
+            'X-GitHub-OTP': '',
+          },
+        }));
+      });
+
+      it('should return correct status code and token response', async () => {
+        await subject(event, stub(), callback);
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 201,
+          body: '{"ok":true,"token":"new-foo-token"}',
+        }));
+      });
+
+      afterEach(() => {
+        subject.__ResetDependency__('GitHub');
+      });
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/put/deprecate.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import pkg from '../fixtures/package';
+
+import subject from '../../src/put/deprecate';
+
+describe('PUT /registry/{name}', () => {
+  let event;
+  let callback;
+  let storageStub;
+
+  beforeEach(() => {
+    const env = {
+      bucket: 'foo-bucket',
+      region: 'bar-region',
+    };
+
+    process.env = env;
+
+    event = (msg, version) => ({
+      requestContext: {
+        authorizer: {
+          username: 'foo',
+          avatar: 'https://example.com',
+        },
+      },
+      body: pkg.deprecate(msg, version),
+      pathParameters: {
+        name: 'foo-bar-package',
+      },
+    });
+
+    callback = stub();
+  });
+
+  describe('deprecate', () => {
+    beforeEach(() => {
+      storageStub = {
+        put: stub(),
+      };
+    });
+
+    it('should store package json', async () => {
+      await subject(
+        event('This package is deprecated', {
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }), {
+          registry: 'https://example.com',
+          user: stub(),
+          log: {
+            info: stub(),
+            error: stub(),
+          },
+          npm: stub(),
+          storage: storageStub,
+          command: {
+            name: 'deprecate',
+            message: 'This package is deprecated',
+          },
+        },
+        callback,
+      );
+
+      assert(storageStub.put.calledWithExactly(
+        'foo-bar-package/index.json',
+        pkg.deprecate('This package is deprecated', {
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }).toString(),
+      ));
+    });
+
+    it('should return correct response', async () => {
+      await subject(
+        event('This package is deprecated', {
+          major: 1,
+          minor: 0,
+          patch: 0,
+        }), {
+          registry: 'https://example.com',
+          user: stub(),
+          log: {
+            info: stub(),
+            error: stub(),
+          },
+          npm: stub(),
+          storage: storageStub,
+        },
+        callback,
+      );
+
+      assert(callback.calledWithExactly(null, {
+        statusCode: 200,
+        body: '{"success":true}',
+      }));
+    });
+
+    context('storage put error', () => {
+      beforeEach(() => {
+        storageStub = {
+          get: stub().returns(pkg.deprecate('This package is deprecated', {
+            major: 1,
+            minor: 0,
+            patch: 0,
+          })),
+          put: stub().throws(new Error('Failed to put')),
+        };
+      });
+
+      it('should return 500 response', async () => {
+        await subject(
+          event('This package is deprecated', {
+            major: 2,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 500,
+          body: '{"success":false,"error":"Failed to put"}',
+        }));
+      });
+    });
+  });
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/put/publish.test.js
+```JS
+/* eslint-disable no-underscore-dangle */
+import pkg from '../fixtures/package';
+
+import subject from '../../src/put/publish';
+
+describe('PUT /registry/{name}', () => {
+  let event;
+  let callback;
+  let storageStub;
+
+  beforeEach(() => {
+    const env = {
+      bucket: 'foo-bucket',
+      region: 'bar-region',
+    };
+
+    process.env = env;
+
+    event = version => ({
+      requestContext: {
+        authorizer: {
+          username: 'foo',
+          avatar: 'https://example.com',
+        },
+      },
+      body: pkg.withAttachments(version),
+      pathParameters: {
+        name: 'foo-bar-package',
+      },
+    });
+
+    callback = stub();
+  });
+
+  describe('publish', () => {
+    context('new package', () => {
+      beforeEach(() => {
+        const notFoundError = new Error('No such key.');
+        notFoundError.code = 'NoSuchKey';
+
+        storageStub = {
+          get: stub().throws(notFoundError),
+          put: stub(),
+        };
+      });
+
+      it('should attempt to get package json', async () => {
+        await subject(
+          event({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              info: stub(),
+              error: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(storageStub.get.calledWithExactly(
+          'foo-bar-package/index.json',
+        ));
+      });
+
+      it('should store tar file', async () => {
+        await subject(
+          event({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              error: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(storageStub.put.calledWithExactly(
+          'foo-bar-package/1.0.0.tgz',
+          'foo-package-data',
+          'base64',
+        ));
+      });
+
+      it('should store package json', async () => {
+        await subject(
+          event({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              info: stub(),
+              error: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(storageStub.put.calledWithExactly(
+          'foo-bar-package/index.json',
+          pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }).toString(),
+        ));
+      });
+
+      it('should return correct response', async () => {
+        await subject(
+          event({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              info: stub(),
+              error: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"success":true}',
+        }));
+      });
+    });
+
+    context('existing package', () => {
+      beforeEach(() => {
+        storageStub = {
+          get: stub().returns(pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          })),
+          put: stub(),
+        };
+      });
+
+      it('should get package json', async () => {
+        await subject(
+          event({
+            major: 2,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              info: stub(),
+              error: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(storageStub.get.calledWithExactly(
+          'foo-bar-package/index.json',
+        ));
+      });
+
+      it('should store tar file', async () => {
+        await subject(
+          event({
+            major: 2,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(storageStub.put.calledWithExactly(
+          'foo-bar-package/2.0.0.tgz',
+          'foo-package-data',
+          'base64',
+        ));
+      });
+
+      it('should store package json', async () => {
+        await subject(
+          event({
+            major: 2,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        const pkg1 = JSON.parse(pkg.withAttachments({ major: 1, minor: 0, patch: 0 }).toString());
+        const pkg2 = JSON.parse(pkg.withAttachments({ major: 2, minor: 0, patch: 0 }).toString());
+
+        const versions = Object.assign(pkg1.versions, pkg2.versions);
+
+        const updatedPackage = Object.assign({}, pkg1, pkg2);
+        updatedPackage.versions = versions;
+        updatedPackage._attachments = pkg2._attachments;
+
+        const expected = JSON.stringify(updatedPackage);
+
+        assert(storageStub.put.calledWithExactly(
+          'foo-bar-package/index.json',
+          expected,
+        ));
+      });
+
+      it('should return correct response', async () => {
+        await subject(
+          event({
+            major: 2,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 200,
+          body: '{"success":true}',
+        }));
+      });
+    });
+
+    context('package id that exists on npm', () => {
+      let npmStub;
+
+      beforeEach(() => {
+        npmStub = {
+          package: stub().returns(
+            JSON.parse(
+              pkg.withAttachments({
+                major: 1,
+                minor: 0,
+                patch: 0,
+              }).toString(),
+            ),
+          ),
+        };
+      });
+
+      it('should return 403 informing you require a unqiue package name', async () => {
+        await subject(
+          event({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: npmStub,
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 403,
+          body: '{"success":false,"error":"Your package name needs to be unique to the public npm registry."}',
+        }));
+      });
+    });
+
+    context('publishing an existing version', () => {
+      beforeEach(() => {
+        storageStub = {
+          get: stub().returns(pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          })),
+        };
+      });
+
+      it('should return 403 informing you cannot re-publish previous versions', async () => {
+        await subject(
+          event({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            apiEndpoint: 'https://example.com/prod/registry',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 403,
+          body: '{"success":false,"error":"You cannot publish over the previously published version 1.0.0."}',
+        }));
+      });
+    });
+
+    context('storage put error', () => {
+      beforeEach(() => {
+        storageStub = {
+          get: stub().returns(pkg.withAttachments({
+            major: 1,
+            minor: 0,
+            patch: 0,
+          })),
+          put: stub().throws(new Error('Failed to put')),
+        };
+      });
+
+      it('should return 500 response', async () => {
+        await subject(
+          event({
+            major: 2,
+            minor: 0,
+            patch: 0,
+          }), {
+            registry: 'https://example.com',
+            user: stub(),
+            log: {
+              error: stub(),
+              info: stub(),
+            },
+            npm: stub(),
+            storage: storageStub,
+          },
+          callback,
+        );
+
+        assert(callback.calledWithExactly(null, {
+          statusCode: 500,
+          body: '{"success":false,"error":"Failed to put"}',
+        }));
+      });
+    });
+  });
+});
+
+```

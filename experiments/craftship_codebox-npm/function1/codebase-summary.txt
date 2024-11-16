@@ -1,0 +1,73 @@
+This codebase implements a private npm registry using AWS Lambda functions and S3 for storage. It's written in JavaScript and utilizes the Serverless framework.  It proxies requests to the public npm registry when a package is not found locally and caches packages, tarballs, and metadata in S3. Authentication is handled via GitHub OAuth.  Logging is integrated using Codebox Insights.
+
+Here's a detailed breakdown:
+
+**1. High-Level Overview:**
+
+The codebase provides the following functionalities:
+
+* **Package Management:**  Handles package publishing, deprecation, retrieval, and listing of available versions (dist-tags).
+* **Storage:**  Uses AWS S3 for storing packages, tarballs, and metadata.
+* **Proxying:**  Forwards requests to the public npm registry if a package is not found locally.
+* **Authentication:**  Uses GitHub OAuth for user authentication.
+* **Logging:**  Logs events to Codebox Insights.
+* **Domain Management:** Provides tools for migrating the registry to a new domain.
+* **Encryption:** Encrypts stored files in S3.
+* **Indexing:** Indexes packages into Codebox Insights.
+
+
+**2. Important Functions and Tasks:**
+
+* **`/src/whoami/get.js`**: Returns the username of the currently logged-in user. It retrieves the username from the `requestContext` provided by the API Gateway's authorizer.
+* **`/src/adapters/s3.js`**: This module provides a class `Storage` for interacting with AWS S3. Key functions include `put()` for storing objects with server-side encryption and `get()` for retrieving objects.  All S3 interactions use `AES256` encryption.
+* **`/src/adapters/logger.js`**: This module provides a class `Logger` for logging to Codebox Insights.  It includes `info()` for informational logs and `error()` for error logs.  It accepts a command, namespace, and credentials for log publishing.
+* **`/src/adapters/npm.js`**: Provides functions for interacting with the public npm registry. `package()` retrieves package metadata, and `tar()` retrieves a package's tarball. It uses `node-fetch` to make HTTP requests.
+* **`/.serverless_plugins/codebox-tools/index.js`**: This plugin provides tools for managing the registry:
+    * `migrate()`: Updates the domain for all packages and the `put` lambda's `apiEndpoint` environment variable.
+    * `encrypt()`: Re-encrypts all files in the S3 bucket.
+    * `index()`: Re-indexes all packages into Codebox Insights.
+* **`/.serverless_plugins/remove-storage/index.js`**: This plugin handles the removal of the S3 bucket when the service is removed.
+* **`/src/tar/get.js`**: Returns the tarball of a specific package version.  It first checks S3 and falls back to the public npm registry if not found.  The tarball is returned as a base64 encoded string.
+* **`/src/dist-tags/delete.js`**: Deletes a dist-tag for a package.
+* **`/src/dist-tags/get.js`**: Returns the dist-tags for a package. It checks S3 and falls back to the public npm registry.
+* **`/src/dist-tags/put.js`**: Adds or updates a dist-tag for a package.
+* **`/src/get/lib.js`**: Core logic for retrieving a package's metadata.  It retrieves data from S3 and falls back to the npm registry if not found. It logs package access information.  This function is used by `src/get/index.js`.
+* **`/src/get/index.js`**:  Handles requests to get package metadata. It uses the `contextFactory` to inject dependencies and then calls the `lib` function.
+* **`/src/user/delete.js`**: Handles user logout by resetting the GitHub OAuth token.
+* **`/src/user/put.js`**: Handles user login via GitHub OAuth. It gets or creates an authorization token for the app.  It also handles Two-Factor Authentication.
+* **`/src/put/publish.js`**: Publishes a new package or version to the registry.  It handles tarball storage, package metadata storage, and logging.  It prevents publishing over existing versions.
+* **`/src/put/deprecate.js`**: Deprecates a specific package version.  Stores the updated metadata in S3.
+* **`/src/put/index.js`**: Entry point for PUT requests to `/registry/{name}`. It dispatches requests to either `publish` or `deprecate` based on the command provided.
+
+
+**3. External Dependencies:**
+
+* **`aws-sdk`**: Used for interacting with AWS S3 and Lambda.
+* **`node-fetch`**: Used for making HTTP requests to the public npm registry and Codebox Insights.
+* **`@octokit/rest`**: Used for interacting with the GitHub API for authentication.
+
+
+**4. Codebase Structure:**
+
+The code is organized by functionality, with each function residing in its own file under the `src` directory. Adapters for external services (S3, Logger, npm) are placed in the `src/adapters` directory. Serverless plugins are located in `.serverless_plugins`. The `test` directory mirrors the `src` directory structure for unit tests.
+
+
+**5. Module Interactions and Data Flow:**
+
+* API Gateway triggers Lambda functions.
+* Lambda functions use the `S3` adapter to interact with storage.
+* Lambda functions use the `npm` adapter to interact with the public npm registry.
+* Lambda functions use the `Logger` adapter to send logs to Codebox Insights.
+* The `contextFactory` function is used to inject dependencies (S3, npm, Logger instances, environment variables, user information) into the Lambda function handlers.
+* Most Lambda functions follow a pattern of checking S3 for data, falling back to the public npm registry if necessary, processing data, storing data back to S3, and logging the operation.
+
+
+**Additional Notes for Developers:**
+
+*   Every function uses callbacks to return results.
+*   Error handling is implemented throughout the codebase, with most functions catching errors and returning appropriate status codes and error messages.
+*   The `requestContext` from the API Gateway event is used to retrieve user information for logging and authorization.
+*   Environment variables are used to configure the registry, such as the S3 bucket name, region, public npm registry URL, and Codebox Insights credentials.  These are set in the Serverless framework configuration.
+*   Testing is done using Mocha and Chai and Rewire is used to mock the dependencies during the test.
+
+By following these conventions and using the provided adapters and utilities, developers can easily extend this codebase with new functions.

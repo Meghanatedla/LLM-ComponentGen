@@ -1,0 +1,15 @@
+You are a computer scientist specializing in serverless computing (especially FaaS).
+You are working with a FaaS codebase whose README is as follows:
+
+{codebase_readme}
+
+Your task is to add a new function to this codebase.
+The function should have the following functionality:
+
+{function_description}
+
+Please generate the complete code for this function, ensuring it integrates seamlessly with the existing system.
+The code should follow best practices for serverless development, and it must be in accordance with the current architecture of the system.
+Note that no human will evaluate the code you generate; your code will be deployed directly to the system.
+Ensure that you do not provide anything except the code. Include any relevant information in comments.
+If you lack any information to write the complete code, mention this in a comment and make a reasonable assumption from the context and your knowledge.

@@ -1,0 +1,42 @@
+{
+    "language": "JS",
+
+    "summarize_codebase": true,
+    "codebase_readme_path": "laconiajs_laconia/README.md",
+    "files_to_summarize_paths": "laconiajs_laconia/function1/context-files-paths.txt",
+
+    "codebase_summary_prompt_template": "prompt-templates/codebase-summarization-prompt-template.txt",
+    "codebase_summary_prompt_save_path": "laconiajs_laconia/function1/prompts/codebase-summarization-prompt.txt",
+    "codebase_summary_save_path": "laconiajs_laconia/function1/codebase-summary.txt",
+    
+    "function_description_prompt_template": "prompt-templates/function-description-prompt-template.txt",
+    "function_description_prompt_save_path": "laconiajs_laconia/function1/prompts/function-description-prompt.txt",
+    "function_description_save_path": "laconiajs_laconia/function1/function-description.txt",
+
+    "function_generation_prompt_template_type1": "prompt-templates/function-generation-prompt-template/type1.txt",
+    "function_generation_prompt_type1_save_path": "laconiajs_laconia/function1/prompts/function-generation-prompt/type1.txt",
+    
+    "function_generation_prompt_template_type2": "prompt-templates/function-generation-prompt-template/type2.txt",
+    "function_generation_prompt_type2_save_path": "laconiajs_laconia/function1/prompts/function-generation-prompt/type2.txt",
+    
+    "function_generation_prompt_template_type3": "prompt-templates/function-generation-prompt-template/type3.txt",
+    "function_generation_prompt_type3_save_path": "laconiajs_laconia/function1/prompts/function-generation-prompt/type3.txt",
+    
+    "chosen_function_path": "/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/capture-card-payment.js",
+    "chosen_function": "capture-card-payment.js",
+    "original_function_save_path": "laconiajs_laconia/function1/ORIGINAL-capture-card-payment.js",
+    
+    "example_function_description1": "laconiajs_laconia/function2/function-description.txt",
+    "example_function_code1": "laconiajs_laconia/function2/ORIGINAL-place-order.js",
+    "example_function_description2": "laconiajs_laconia/function3/function-description.txt",
+    "example_function_code2": "laconiajs_laconia/function3/ORIGINAL-process-card-payments.js",
+    
+    "generated_function_type1_save_dir": "laconiajs_laconia/function1/GENERATED/type1",
+    "generated_function_type2_save_dir": "laconiajs_laconia/function1/GENERATED/type2",
+    "generated_function_type3_save_dir": "laconiajs_laconia/function1/GENERATED/type3",
+
+    "run_codebleu": true,
+    "codebleu_type1_save_dir": "laconiajs_laconia/function1/codebleu-results/type1",
+    "codebleu_type2_save_dir": "laconiajs_laconia/function1/codebleu-results/type2",
+    "codebleu_type3_save_dir": "laconiajs_laconia/function1/codebleu-results/type3"
+}

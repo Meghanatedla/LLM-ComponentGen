@@ -1,0 +1,45 @@
+The function `monitorCloudFormationStack` acts as the core logic for monitoring and managing the lifecycle of CloudFormation stacks within a serverless application. Its primary purpose is to respond to CloudFormation events (create, update, and delete) and maintain a persistent record of stack information, including expiration times, for automated cleanup.
+
+**1. Implementation Details:**
+
+* **Parameters:**
+    * `event`: A `CloudFormationEvent` object containing details about the CloudFormation stack operation (create, update, or delete). This object contains information like the stack name, event time, request parameters, and response elements.
+    * `dataMapper`: An `Entity` object from the `dynamodb-toolbox` library. This object represents a DynamoDB table and provides methods for interacting with it (put, delete, get, update).
+
+* **Return Value:** A `Promise` that resolves to a `MonitoringResultStatus` (either "success" or "ignore").  "success" indicates that the function successfully processed the event and updated the database. "ignore" signifies that the event was either of an unsupported type or an error occurred during processing.
+
+* **Logic:**
+    * The function uses a `switch` statement to determine the type of CloudFormation event (`CreateStack`, `UpdateStack`, or `DeleteStack`).
+    * Based on the event type, it generates a data item representing the stack and performs a corresponding action on a DynamoDB table using the `dataMapper`.  
+    * For create and update events, it generates a new `DataItem` including the stack name, ID, expiration time (calculated from the event time and a configured default expiration period), and tags. It then stores or updates this item in the DynamoDB table.
+    * For delete events, it generates a `DeleteItem` with the stack name and ID and removes the corresponding item from the DynamoDB table.
+    * Helper functions (`generateItemFromEvent`, `generateDeleteItem`, `getExpirationTime`) are used to encapsulate the logic for generating data items and expiration times.
+    * The `handleDataItem` function abstracts the database interaction logic, handling put, delete, get, and update operations based on the provided action.
+
+**2. Relationships:**
+
+* **Dependencies:**
+    * `config`:  Imports configuration values, specifically `DEFAULT_EXPIRATION_PERIOD` and `DELETE_INTERVAL`.
+    * `logger`:  Used for logging information and errors.
+    * `CloudFormationEvent`, `DataItem`, `DeleteItem`, `StackJanitorStatus` types.
+    * `Actions`, `JanitorRecord` for DynamoDB interaction.
+    * `Entity` from `dynamodb-toolbox` for database operations.
+    * `getStackArn` function to retrieve stack ARN when needed.
+
+* **Influences:** The function directly modifies the state of a DynamoDB table by adding, updating, or removing stack records. It relies on the `JanitorRecord` entity to map to the specific DynamoDB table.
+
+
+**3. Structure:**
+
+The main structure revolves around the `switch` statement based on the `event.detail.eventName`. Each case within the `switch` statement calls helper functions to generate the appropriate data item (`DataItem` or `DeleteItem`) and then uses `handleDataItem` to interact with the DynamoDB table.  Error handling is implemented within `handleDataItem` to catch and log exceptions.
+
+
+**4. Purpose and Role:**
+
+This function is crucial for maintaining the state of CloudFormation stacks and enabling automated cleanup. It provides the following functionality:
+
+* **Tracking Stack Creation/Updates:**  Ensures that newly created or updated stacks are recorded in the DynamoDB table with their expiration times.
+* **Facilitating Stack Deletion:** Enables the deletion of stack information from the database when a stack is deleted.
+* **Automated Cleanup (External):**  Although not directly implemented within this function, the stored expiration times in the DynamoDB table are used by other parts of the system (not shown) to trigger automated deletion of expired stacks.
+
+This function essentially bridges the gap between CloudFormation events and a persistent data store, enabling other parts of the system to perform actions like automated cleanup.

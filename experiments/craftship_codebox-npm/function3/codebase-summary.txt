@@ -1,0 +1,94 @@
+```
+## Codebase Summary for craftship_codebox-npm
+
+This codebase implements a private npm registry using AWS Lambda functions (Node.js) and S3 for storage. It leverages GitHub for authentication and authorization.
+
+**1. High-Level Overview:**
+
+The codebase provides functionalities for publishing, downloading, and managing npm packages within a private registry. It uses S3 to store package data and metadata, and Lambda functions to handle various API requests. GitHub integration provides secure access control.  Additionally, the codebase includes custom serverless plugins for maintenance tasks like data migration, encryption, and indexing.
+
+**2. Breakdown of Important Functions:**
+
+**Lambda Functions:**
+
+* **`/src/whoami/get.js`**: Returns the username of the currently logged-in user.  It retrieves the username from the `requestContext` provided by the API Gateway authorizer.
+
+* **`/src/tar/get.js`**: Retrieves the tarball of a specific package version. It first checks S3. If the tarball is not present, it fetches it from the configured upstream npm registry and returns it base64 encoded.
+
+* **`/src/authorizers/github.js`**:  Authenticates users against GitHub. It verifies the provided GitHub token and generates an IAM policy that allows or denies access to specific API Gateway resources based on user roles (admin or regular user) and organization membership (if configured).
+
+* **`/src/dist-tags/delete.js`**: Deletes a specific distribution tag from a package.  Retrieves package metadata from S3, removes the specified tag, updates the metadata in S3, and logs the action.
+
+* **`/src/dist-tags/get.js`**: Retrieves the distribution tags for a specific package.  It checks for the package metadata in S3 and returns the tags. If the package is not found locally, it falls back to the upstream npm registry.
+
+* **`/src/get/index.js`**: Retrieves the package metadata (package.json) for a specific package.  It uses `/src/get/lib.js` to perform the retrieval logic, which includes checking S3 and falling back to the upstream npm registry if needed.
+
+* **`/src/get/lib.js`**: Contains the core logic for fetching package metadata. It checks S3 first, falls back to the upstream registry, and logs package access.
+
+
+* **`/src/user/delete.js`**: Logs out the user by revoking their GitHub access token.
+
+
+* **`/src/user/put.js`**:  Logs in the user using their GitHub credentials and generates a GitHub access token. Handles Two-Factor Authentication (2FA) as well.
+
+
+* **`/src/put/publish.js`**: Publishes a new package or a new version of an existing package. It checks for name conflicts with the public registry, stores the tarball and updated metadata in S3, and logs the publishing event.
+
+
+* **`/src/put/deprecate.js`**: Deprecates a specific version of a package. Stores the updated package metadata (including the deprecation message) in S3.
+
+
+* **`/src/put/index.js`**: Handles `PUT` requests for packages, delegating to either `publish` or `deprecate` based on the command being executed.
+
+
+
+**Serverless Plugins:**
+
+* **`/.serverless_plugins/codebox-tools/index.js`**: This plugin provides tools for managing the private registry. It implements commands for:
+    * **`domain`**: Updates the hosted domain for the registry.
+    * **`encrypt`**: Re-encrypts all files within the S3 bucket.
+    * **`index`**: Re-indexes all packages into Codebox Insights.
+
+* **`/.serverless_plugins/remove-storage/index.js`**: This plugin deletes the S3 bucket and all its contents before service removal.
+
+
+**3. External Dependencies:**
+
+* **`aws-sdk`**: Used for interacting with AWS services, primarily S3 and Lambda.
+* **`node-fetch`**: Used for making HTTP requests, specifically to the upstream npm registry and the Codebox logging service.
+* **`@octokit/rest`**: Used for interacting with the GitHub API for authentication and authorization.
+
+
+
+**4. Codebase Structure:**
+
+The codebase is organized by functionality, with each Lambda function residing in its own directory under `src`.  Adapter modules (`s3.js`, `logger.js`, `npm.js`) provide abstractions for interacting with external services. The serverless plugins are located under `.serverless_plugins`. Test files are located in a separate `test` directory mimicking the `src` structure.
+
+**5. Module Interactions & Data Flow:**
+
+* **Lambda functions:** invoked by API Gateway requests, often using path parameters to determine the operation and the package name.
+
+* **`S3` adapter:**  used by Lambda functions to store and retrieve package data (tarballs, metadata).
+
+* **`npm` adapter:**  used by Lambda functions to interact with the upstream npm registry, primarily for fetching package information when it is not available in the private registry.
+
+* **`logger` adapter:**  used to log events to the Codebox logging service.
+
+* **GitHub API:** used by the authorizer and user management functions for authentication, authorization, and managing user tokens.
+
+* **Serverless plugins:** interact with AWS services (S3, Lambda) to perform maintenance tasks.
+
+
+**Practices/Styles:**
+
+* ES6 modules are used throughout the codebase.
+* Async/await is heavily used for asynchronous operations.
+*  The `contextFactory.js` file provides a consistent way to create and pass context objects to Lambda functions, which contain commonly needed objects and parameters.
+*  All functions expect event, context, and callback as parameters.
+*  Base64 encoding is used for storing and transferring tarballs.
+
+
+This detailed summary should allow developers to implement new functions and understand the relationships between different modules within the `craftship_codebox-npm` codebase without having to examine the original source files extensively.
+
+
+```

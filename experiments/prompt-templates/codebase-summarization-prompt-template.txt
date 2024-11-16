@@ -1,0 +1,9 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to summarize the entire codebase provided below so that other developers may use it when adding more functions to this codebase. Please ensure that it is a detailed summary and includes the following details:
+
+1. A high-level overview of the main functionalities offered by the codebase, highlighting key modules or components.
+2. A breakdown of important functions and what specific tasks or executions they handle.
+3. Identify any external dependencies, libraries, or frameworks the code relies on, and describe how they are integrated into the codebase.
+4. Describe the overall structure of the codebase (e.g., how files are organized, major classes or modules).
+5. Explain any relationships or interactions between different modules or components, such as how data flows between them. 
+
+Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:

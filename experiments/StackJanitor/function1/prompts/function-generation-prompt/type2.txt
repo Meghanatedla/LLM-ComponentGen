@@ -1,0 +1,164 @@
+ 
+You are a computer scientist specializing in serverless computing (especially FaaS).
+You are working with a FaaS codebase whose description is as follows:
+
+The codebase is written in TypeScript and implements a serverless application for managing the lifecycle of AWS CloudFormation stacks. It uses a DynamoDB table to track stack information and leverages AWS Lambda functions for handling various events.
+
+1. **High-Level Overview:**
+
+The application provides the following core functionalities:
+
+* **Monitoring CloudFormation Stacks:** Monitors CloudFormation events (Create, Update, Delete) and updates the DynamoDB table accordingly.
+* **Deleting Expired Stacks:** Deletes stacks based on their expiration time stored in DynamoDB.
+* **Handling Git Hooks:** Reacts to Bitbucket and GitHub webhook events (e.g., pull request merged or declined) to trigger stack deletion.
+* **Logging:** Provides extensive logging for debugging and monitoring.
+* **Optional Handlers:** Offers utility functions for describing all stacks, checking stack expiration, filtering stacks by status and tags, and getting stack names.
+
+2. **Breakdown of Important Functions:**
+
+* **`/src/handlers/monitorCloudFormationStack.ts`**:
+    * `monitorCloudFormationStack(event, dataMapper)`: This is the main function of this handler, responsible for processing CloudFormation events. It generates or updates items in the DynamoDB table based on the event type (Create, Update, or Delete).
+    * `generateItemFromEvent(event)`: Creates a new DynamoDB item from a CloudFormation event.
+    * `generateDeleteItem(event)`: Creates a DynamoDB delete request item based on stack name/ARN.
+    * `generateRepeatedDeleteItem`: Regenerates DataItem for retry mechanism for failed deletes.
+    * `getExpirationTime(eventTime)`: Calculates the expiration time of a stack based on the event time and configured expiration period.
+    * `handleDataItem(item, handler, action)`: Performs DynamoDB operations (put, delete, get, update) based on the provided action.
+    * `index(stackJanitorStatus)`: Entry point for the Lambda function. It calls `monitorCloudFormationStack` with the provided event and the `JanitorRecord` entity.
+
+* **`/src/handlers/deleteCloudFormationStack.ts`**:
+    * `index(event)`: Processes DynamoDB stream events, specifically "REMOVE" events, which indicate a stack should be deleted. It retrieves stack information from the event and calls `deleteCloudFormationStack`.
+    * `deleteCloudFormationStack(item)`: Deletes a CloudFormation stack. It first checks if StackJanitor is enabled for the stack via the corresponding tag.
+    * `processRecords`: Handler for the processRecords function. Iterates through Dynamo Stream records.
+    * `isStackJanitorEnabled`: Helper function to determine if stackjanitor tag is enabled for a stack.
+
+
+* **`/src/handlers/gitHook.ts`**:
+    * `index(event)`: Entry point for the Lambda function. Handles incoming Bitbucket and GitHub webhook events.
+    * `bitBucketEventHandler(eventData)`: Processes Bitbucket webhook events. It parses the event data, checks the pull request state, logs information, and triggers stack deletion if the state is "MERGED" or "DECLINED".
+    * `gitHubEventHandler(eventData)`: Processes GitHub webhook events similarly to the Bitbucket handler.
+    * `bitbucketEventParser(eventData)`: Extracts relevant information (repository, branch) from a Bitbucket webhook event.
+    * `gitHubEventParser(eventData)`: Extracts relevant information (repository, branch) from a GitHub webhook event.
+    * `isBitbucketEvent(event)`: Type guard to check if an event is a Bitbucket webhook event.
+    * `isGithubEvent(event)`: Type guard to check if an event is a GitHub webhook event.
+    * `findAndDeleteStacksFromTag(gitTag)`: Finds stacks with the given tag and calls `deleteStacks` to delete them.
+    * `deleteStacks(stacks)`: Deletes the provided stacks and handles potential errors during deletion.
+    * `isInDesiredState(state)`: Checks if a pull request state is "MERGED" or "DECLINED".
+
+* **`/src/handlers/logCloudFormationStack.ts`**:
+    * `index(event)`: Main function of this handler. Checks stackjanitor tag and returns whether it is enabled or not. 
+    * `getTagsFromStacks`: Helper function to retrieve tags from stacks.
+    * `getStackJanitorStatus`: Helper function to extract the value of the stackjanitor tag.
+    * `findTag`: Helper function to get the stackjanitor tag or undefined.
+    * `convertTags`: Helper function to format tags in the right format.
+
+
+* **`/src/handlers/dynamoParser.ts`**:
+    * `parseEventRecords(event)`: Parses DynamoDB stream events and extracts relevant data, including new and old images and the event type.
+    * `unmarshallStream`: Helper function to parse Dynamo Stream records.
+
+
+* **`/src/optional-handlers/utils/describeAllStacks.ts`**:
+    * `describeAllStacks(nextToken)`: Retrieves all CloudFormation stacks, handling pagination if necessary.
+
+* **`/src/optional-handlers/utils/isStackExpired.ts`**:
+    * `isStackExpired(stack)`: Checks if a stack is expired based on its creation or last updated time.
+
+* **`/src/optional-handlers/utils/helpers.ts`**:
+    * `returnStackStatus(stacks)`: Filters a list of stacks based on whether they match a list of possible statuses.
+    * `returnStackTags(stacks)`: Filters stacks by the existence and value of a specific tag.
+    * `getStackName(stack)`: Extracts stack names from a list of stacks.
+
+
+3. **External Dependencies:**
+
+* **AWS SDK for JavaScript v3:** Used for interacting with AWS services (CloudFormation, DynamoDB, Lambda).
+* **`stackjanitor`:**
+* **`dynamodb-toolbox`:** Simplifies working with DynamoDB.
+* **`lodash`:** Utility library.
+* **`pino`:** Logging library.
+* **`aws-sdk-client-mock`:** For mocking AWS clients in tests.
+* **`sinon`:** For creating test stubs.
+
+
+
+4. **Codebase Structure:**
+
+The codebase is organized by handlers, each residing in its own file under the `src/handlers` directory. Utility functions are placed in `src/optional-handlers/utils`. Test files are located alongside the source files with a `.test.ts` extension.
+
+
+5. **Data Flow:**
+
+* CloudFormation events trigger the `monitorCloudFormationStack` function, which updates the DynamoDB table.
+* DynamoDB stream events (specifically "REMOVE") trigger the `deleteCloudFormationStack` function, which deletes the corresponding CloudFormation stack.
+* Git webhook events trigger either `bitBucketEventHandler` or `gitHubEventHandler`, which in turn call `findAndDeleteStacksFromTag` to delete stacks associated with a specific tag.
+
+**General Practices/Styles:**
+
+* Uses Jest for testing.
+* Employs TypeScript for type safety.
+* Leverages `pino` for logging.
+* Each function typically handles a specific task.
+* Asynchronous operations are handled using `async/await`.
+* Error handling is implemented using `try/catch` blocks.
+* Configuration is managed using a `config` module.
+
+
+
+This detailed summary should enable developers to implement new functions within this codebase without needing to consult the original code files.  They can use this understanding of the function signatures, data flow, dependencies, and structure to add new features or modify existing ones effectively. Remember to follow established patterns for testing, logging, and error handling when adding new functionality.
+
+
+Your task is to add a new function to this codebase. 
+The function should have the following functionality:
+
+## Serverless Function Description: Search and Delete Expired CloudFormation Stacks
+
+This serverless function, `searchDeleteCloudformationStack.ts`,  identifies and deletes expired AWS CloudFormation stacks based on specific criteria.
+
+**1. Purpose and Role:**
+
+This function acts as a cleanup mechanism for CloudFormation stacks. Its primary role is to prevent the accumulation of unused stacks, which can lead to unnecessary costs and management overhead.  It achieves this by systematically searching for stacks that meet certain criteria (status, tags, and expiration time) and then initiating their deletion.
+
+**2. Implementation Details:**
+
+The function operates by first retrieving all CloudFormation stacks within the AWS account. It then filters these stacks based on their status, presence of specific tags indicating that they are managed by this cleanup process (StackJanitor enabled), and whether they have exceeded their defined expiration time. Finally, it triggers the deletion process for any stacks that meet all these criteria.
+
+* **Parameters:** The function does not take any direct input parameters.
+* **Return Values:** The function does not explicitly return any value. Its primary output is the side effect of deleting expired stacks.
+* **Algorithms/Steps:**
+    * Retrieves all CloudFormation stacks.
+    * Filters stacks based on status (using `returnStackStatus`).
+    * Filters the resulting stacks based on the presence of specific tags (using `returnStackTags`).
+    * Filters the resulting stacks based on expiration time (using `isStackExpired`).
+    * Extracts the names of the expired stacks (using `getStackName`).
+    * Iterates through the list of expired stack names and initiates deletion for each (using `deleteStack`).
+
+**3. Relationships:**
+
+* **Dependencies:**
+    * `describeAllStacks` (from `./utils/describeAllStacks`): Used to retrieve all CloudFormation stacks.
+    * `returnStackStatus` (from `./utils/helpers`): Used to filter stacks based on their status.
+    * `returnStackTags` (from `./utils/helpers`): Used to filter stacks based on specific tags.
+    * `isStackExpired` (from `./utils/isStackExpired`): Used to filter stacks based on expiration time.
+    * `getStackName` (from `./utils/helpers`): Used to extract the names of the stacks to be deleted.
+    * `deleteStack` (from `../cloudformation`): Used to initiate the deletion of a CloudFormation stack.
+
+* **Influences:** This function directly influences the state of CloudFormation stacks within the AWS account by deleting those identified as expired.
+
+**4. Structure:**
+
+The function follows a linear sequence of operations:
+
+1. **Retrieval:** Retrieve all stacks.
+2. **Filtering:** Apply a series of filters (status, tags, expiration) to narrow down the list of stacks.
+3. **Extraction:** Extract the names of the filtered stacks.
+4. **Deletion:** Iterate through the extracted names and delete each corresponding stack.
+
+
+This structure allows for clear separation of concerns and makes it easy to understand the flow of logic. The filtering process ensures that only the intended stacks are deleted, while the extraction step prepares the data for the final deletion step.  The asynchronous nature of the `deleteStack` calls within the `forEach` loop allows for parallel deletion of multiple stacks, potentially improving performance.
+
+
+Please generate the complete code for this function, ensuring it integrates seamlessly with the existing system. 
+The code should follow best practices for serverless development, and it must be in accordance with the current architecture of the system.
+Note that no human will evaluate the code you generate; your code will be deployed directly to the system. 
+Ensure that you do not provide anything except the code. Include any relevant information in comments. 
+If you lack any information to write the complete code, mention this in a comment and make a reasonable assumption from the context and your knowledge.

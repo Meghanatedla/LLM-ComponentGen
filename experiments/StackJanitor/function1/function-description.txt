@@ -1,0 +1,45 @@
+## Serverless Function Description: Search and Delete Expired CloudFormation Stacks
+
+This serverless function, `searchDeleteCloudformationStack.ts`,  identifies and deletes expired AWS CloudFormation stacks based on specific criteria.
+
+**1. Purpose and Role:**
+
+This function acts as a cleanup mechanism for CloudFormation stacks. Its primary role is to prevent the accumulation of unused stacks, which can lead to unnecessary costs and management overhead.  It achieves this by systematically searching for stacks that meet certain criteria (status, tags, and expiration time) and then initiating their deletion.
+
+**2. Implementation Details:**
+
+The function operates by first retrieving all CloudFormation stacks within the AWS account. It then filters these stacks based on their status, presence of specific tags indicating that they are managed by this cleanup process (StackJanitor enabled), and whether they have exceeded their defined expiration time. Finally, it triggers the deletion process for any stacks that meet all these criteria.
+
+* **Parameters:** The function does not take any direct input parameters.
+* **Return Values:** The function does not explicitly return any value. Its primary output is the side effect of deleting expired stacks.
+* **Algorithms/Steps:**
+    * Retrieves all CloudFormation stacks.
+    * Filters stacks based on status (using `returnStackStatus`).
+    * Filters the resulting stacks based on the presence of specific tags (using `returnStackTags`).
+    * Filters the resulting stacks based on expiration time (using `isStackExpired`).
+    * Extracts the names of the expired stacks (using `getStackName`).
+    * Iterates through the list of expired stack names and initiates deletion for each (using `deleteStack`).
+
+**3. Relationships:**
+
+* **Dependencies:**
+    * `describeAllStacks` (from `./utils/describeAllStacks`): Used to retrieve all CloudFormation stacks.
+    * `returnStackStatus` (from `./utils/helpers`): Used to filter stacks based on their status.
+    * `returnStackTags` (from `./utils/helpers`): Used to filter stacks based on specific tags.
+    * `isStackExpired` (from `./utils/isStackExpired`): Used to filter stacks based on expiration time.
+    * `getStackName` (from `./utils/helpers`): Used to extract the names of the stacks to be deleted.
+    * `deleteStack` (from `../cloudformation`): Used to initiate the deletion of a CloudFormation stack.
+
+* **Influences:** This function directly influences the state of CloudFormation stacks within the AWS account by deleting those identified as expired.
+
+**4. Structure:**
+
+The function follows a linear sequence of operations:
+
+1. **Retrieval:** Retrieve all stacks.
+2. **Filtering:** Apply a series of filters (status, tags, expiration) to narrow down the list of stacks.
+3. **Extraction:** Extract the names of the filtered stacks.
+4. **Deletion:** Iterate through the extracted names and delete each corresponding stack.
+
+
+This structure allows for clear separation of concerns and makes it easy to understand the flow of logic. The filtering process ensures that only the intended stacks are deleted, while the extraction step prepares the data for the final deletion step.  The asynchronous nature of the `deleteStack` calls within the `forEach` loop allows for parallel deletion of multiple stacks, potentially improving performance.

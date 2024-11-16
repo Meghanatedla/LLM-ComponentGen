@@ -1,0 +1,95 @@
+This codebase implements a private npm registry using AWS Lambda functions and S3 for storage. It's written in JavaScript and uses Node.js along with several external libraries.
+
+**1. High-Level Overview:**
+
+The codebase provides the following core functionalities:
+
+* **User Authentication:** Uses GitHub for authentication, supporting both regular login and 2FA.
+* **Package Management:** Allows publishing, retrieving, and deprecating npm packages.
+* **Package Storage:** Stores package tarballs and metadata in S3.
+* **Dist-tags Management:**  Handles dist-tags like `latest` and custom tags.
+* **Logging:** Logs events to Codebox Insights.
+* **Domain Migration:** Provides tools for migrating to a new domain.
+* **Whoami:** Endpoint to get current user info.
+* **Data Migration & Encryption Tooling:** Offers utility functions to encrypt existing packages and re-index them for Codebox Insights.
+* **Storage Removal:** Automates removal of the S3 bucket used for storage.
+
+
+**2. Breakdown of Important Functions:**
+
+* **`/src/whoami/get.js`:** Returns the username of the currently logged-in user.  It retrieves this information from the `requestContext.authorizer.username`, which is populated by the GitHub authorizer. Returns a 200 status code with the username in the body.
+
+* **`/src/adapters/s3.js`:** This module provides a wrapper around the AWS S3 SDK.
+    * `constructor({ region, bucket })`: Initializes the S3 client with the provided region and bucket name.
+    * `put(key, data, encoding)`: Uploads data to S3 at the specified key, handles base64 encoding, and uses AES256 server-side encryption.
+    * `get(key)`: Retrieves data from S3 at the specified key.
+
+* **`/src/adapters/logger.js`:** This module provides a wrapper for logging to Codebox Insights.
+    * `constructor(cmd, namespace, credentials = {})`: Initializes the logger with the command, namespace, and credentials (clientId and secret).
+    * `publish(json)`: Sends the log message to the Codebox Insights API.
+    * `error(user, { stack, message })`: Logs an error message.
+    * `info(user, message)`: Logs an informational message.
+
+* **`/src/adapters/npm.js`:** This module provides functions for interacting with the public npm registry.
+    * `package(registry, name)`: Fetches package metadata from the given registry.
+    * `tar(registry, name)`: Fetches the package tarball from the given registry.
+
+* **`/src/.serverless_plugins/codebox-tools/index.js`:** This plugin offers tooling for data migration, encryption and domain updates.
+    * `migrate()`: Migrates the registry to a new host by updating tarball URLs in `index.json` files and lambda configuration.
+    * `encrypt()`: Encrypts all files stored in S3 by re-uploading them with server-side encryption.
+    * `index()`: Re-indexes all packages in the registry with Codebox Insights.
+
+* **`/src/.serverless_plugins/remove-storage/index.js`:** This plugin ensures the removal of the S3 bucket upon service removal via the `serverless remove` command.
+    * `beforeRemove()`: Removes all objects from the configured S3 bucket, and deletes the bucket itself.
+
+* **`/src/tar/get.js`:** Retrieves a package tarball. First attempts to fetch from S3 and falls back to the public npm registry if not found. Returns the tarball as a base64 encoded string.
+
+* **`/src/authorizers/github.js`:** Authorizes requests based on GitHub credentials. Checks if user is a member of restricted organizations and/or an administrator.
+
+* **`/src/dist-tags/delete.js`:** Deletes a dist-tag for a package.
+
+* **`/src/dist-tags/put.js`:** Adds or updates a dist-tag for a package.
+
+* **`/src/get/lib.js`:** Retrieves package metadata. First attempts to fetch from S3 and falls back to the public npm registry if not found.  
+
+* **`/src/get/index.js`:** Entry point for GET requests to retrieve package metadata, uses `lib` to handle the core logic.
+
+* **`/src/user/delete.js`:** Logs out a user by resetting their GitHub authorization token.
+
+* **`/src/user/put.js`:** Logs in a user by creating a GitHub authorization token.
+
+* **`/src/put/publish.js`:** Publishes a new package or a new version of an existing package.
+
+* **`/src/put/deprecate.js`:** Deprecates a package version.
+
+* **`/src/put/index.js`:** Entry point for PUT requests to publish or deprecate a package, uses functions from the same directory to handle the core logic based on the `command` used.
+
+**3. External Dependencies:**
+
+* **`aws-sdk`:** Used for interacting with AWS services (S3, Lambda).
+* **`node-fetch`:** Used for making HTTP requests (to public npm registry and Codebox Insights).
+* **`@octokit/rest`:** GitHub API client.
+
+**4. Codebase Structure:**
+
+The code is organized by functionality, with modules for different API endpoints (e.g., `whoami`, `tar`, `get`, `put`, `dist-tags`, `user`). Adapters are provided for interacting with external services (S3, public npm, Logger). Serverless plugins handle tasks related to deployment and removal. Test files mirror the structure of the source files.
+
+**5. Module Interactions:**
+
+* API endpoint handlers use the adapters to interact with external services.
+* The `contextFactory` function is used to create a context object that is passed to handler functions. This context object contains instances of the adapters, as well as other relevant information (environment variables, user credentials).
+* Data flows from API requests through the handler functions and adapters to S3 or the public npm registry.  
+* Log messages are sent to Codebox Insights via the `Logger` adapter.
+* Serverless plugins interact directly with AWS services during deployment and removal.
+
+**Coding Styles/Practices:**
+
+* The codebase uses ES6 modules and asynchronous functions (`async`/`await`).
+* Callback style is used for lambda handler functions.
+* Error handling is implemented using `try`/`catch` blocks.
+* The `requestContext` object from the API Gateway event is used to access user information.
+* Environment variables are used to configure the codebase (e.g., S3 bucket name, region, public npm registry URL).
+
+
+
+This summary should provide sufficient information for a developer to understand the codebase and start implementing a new function by following existing patterns, including proper use of existing adapters and the `contextFactory`.  For instance, if one is trying to add a new lambda, one needs to make sure that they use the callback style and use the `contextFactory` which provides the context object. They must also make sure that any interaction with any external service must make use of the corresponding adapter for that service (example: interaction with S3 must make use of the `S3` adapter). You also need to ensure that necessary test cases are implemented similar to existing tests in the codebase.

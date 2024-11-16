@@ -1,0 +1,48 @@
+This serverless function retrieves the distribution tags (dist-tags) for a given npm package.  It first attempts to fetch the package information from an S3 bucket and if that fails, it falls back to fetching the data from the npm registry.
+
+1. **Implementation Details:**
+
+* **Parameters:**
+    * `requestContext`: An object containing information about the request, including authorization details (username and avatar) within the `authorizer` property.
+    * `pathParameters`: An object containing path parameters extracted from the request URL.  Crucially, it contains the `name` of the npm package.
+    * `context`:  The AWS Lambda context object (standard for Lambda functions but not used directly within provided code.
+    * `callback`: The callback function to return the response.
+
+
+* **Return Value:** The function doesn't return a value directly. Instead, it invokes the `callback` function with the response.  The response is an object with the following structure:
+    * `statusCode`:  The HTTP status code (200 for success, 404 if the package isn't found, 500 for server errors).
+    * `body`: A JSON string containing the dist-tags or an error object.  In a success scenario, it is the `dist-tags` from the package metadata.
+
+* **Logic:**
+    1. **S3 Lookup:**  It first tries to retrieve an `index.json` file from an S3 bucket, constructing the key as `[packageName]/index.json`. This file is assumed to contain package metadata.
+    2. **S3 Success:** If the S3 lookup is successful, the function parses the JSON from the retrieved buffer and returns the `dist-tags` property within.
+    3. **S3 Failure (NoSuchKey):** If the S3 lookup fails with a `NoSuchKey` error, the function then attempts to fetch the package information from the npm registry.
+    4. **npm Registry Success:**  If the npm registry fetch is successful, the function returns the `dist-tags` from the retrieved data.
+    5. **npm Registry Failure:** If the npm registry fetch fails, the function returns a 404 error with the error message.
+    6. **Other S3 Failure:** If any other error occurs during the S3 interaction, it is logged, and a 500 error is returned with the error message.
+
+
+
+2. **Relationships:**
+
+* **Dependencies:**
+    * `npm`: An adapter module for interacting with the npm registry.  Exposes a method called `package` which retrieves the package metadata.
+    * `S3`: An adapter module for interacting with Amazon S3. Exposes methods such as `get` to retrieve object content from S3.
+    * `Logger`: An adapter module for logging errors.  Has an `error` logging method.
+
+* **Environment Variables:**
+    * `registry`: The URL of the npm registry.
+    * `bucket`: The name of the S3 bucket.
+    * `region`: The AWS region where the S3 bucket and potentially the logging topic reside.
+    * `logTopic`: The name of the logging topic (possibly SNS).
+
+
+3. **Structure:**
+
+The function is structured primarily around a `try...catch` block for handling the S3 retrieval. Within the `catch` block, there is nested error handling and a conditional to determine the course of action based on the error code.
+
+
+
+4. **Purpose and Role:**
+
+This function serves as an endpoint to retrieve the dist-tags for a specified npm package. Its role is to provide quick access to these tags, potentially caching them in S3 for performance improvement. The primary use case would be to determine the latest versions of a package based on its tags (e.g., "latest", "next", "beta").  The caching mechanism in S3 intends to reduce load on the npm registry by serving package metadata from the cache when available.

@@ -1,0 +1,7 @@
+gh api graphql -F owner='firecracker-microvm' -F name='firecracker' -f query='
+  query($name: String!, $owner: String!) {
+    repository(owner: $owner, name: $name) {
+      forkCount,
+      stargazerCount
+    }
+  }

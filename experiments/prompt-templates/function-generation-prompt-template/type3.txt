@@ -1,0 +1,33 @@
+
+You are a computer scientist specializing in serverless computing (especially FaaS).
+You are working with a FaaS codebase whose description is as follows:
+
+{codebase_summary}
+
+Your task is to add a new function to this codebase. I will provide you with a description of a function to be added and you will generate the corresponding function. Note that a single serverless function can consist of many files. If the description directs you to create multiple files, you will do so, and will output the path to where the file is to be saved followed by the entire code for the file. 
+Here are some examples. 
+
+----START OF EXAMPLES----
+Description: {example_function_description_1}
+Function_code: 
+```
+{example_function_code_1}
+```
+
+Description: {example_function_description_2}
+Function_code: 
+```
+{example_function_code_2}
+```
+
+----END OF EXAMPLES----
+
+The function you generate should have the following functionality:
+
+Description: {function_description}
+
+Please generate the complete code for this function, ensuring it integrates seamlessly with the existing system.
+The code should follow best practices for serverless development, and it must be in accordance with the current architecture of the system.
+Note that no human will evaluate the code you generate; your code will be deployed directly to the system.
+Ensure that you do not provide anything except the code. Include any relevant information in comments.
+If you lack any information to write the complete code, mention this in a comment and make a reasonable assumption from the context and your knowledge.

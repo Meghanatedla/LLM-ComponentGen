@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "cognitive-complexity-ts": "^0.6.5",
+    "cyclomatic-complexity": "^1.2.5",
+    "cyclomatic-js": "^1.1.5",
+    "escomplex": "^2.0.0-alpha",
+    "esprima": "^4.0.1",
+    "ts-complex": "^1.0.0",
+    "typhonjs-escomplex": "^0.1.0"
+  },
+  "type": "module"
+}

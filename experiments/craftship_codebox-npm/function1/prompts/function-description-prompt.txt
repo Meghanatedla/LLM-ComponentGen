@@ -1,0 +1,155 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to describe the serverless function provided below so that another developer may use it to rewrite this function better. Please ensure that it is a detailed description and includes the following details:
+
+1. Implementation details: Describe the logic of the function, its parameters, return values, and any specific algorithms or steps it follows.
+2. Relationships: Explain how this function interacts with other parts of the codebase, including any functions, classes, or modules it depends on or influences.
+3. Structure: Outline the internal structure of the function, including any key blocks of code or conditionals that drive its behavior.
+4. Purpose and Role: Explain the purpose of the function within the system and its importance to the overall functionality.
+
+Ensure that the explanation is clear enough to allow for the function to be recreated from this description, but still flexible enough for the next developer to write code that may be more optimized or clean. Your description should not constrain the implementation more than offering interface details. Do not specify specific steps followed in the code that are an implementational decision, but provide the goal/functionality of the function and a high level view of how it is achieving the goal. The function path and the function code itself (enclosed in triple backticks) are provided below:
+
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/authorizers/github.js
+```JS
+import url from 'url';
+import GitHub from '@octokit/rest';
+
+const generatePolicy = ({
+  effect,
+  methodArn,
+  token,
+  isAdmin,
+}) => {
+  const methodParts = methodArn.split(':');
+  const region = methodParts[3];
+  const accountArn = methodParts[4];
+  const apiId = methodParts[5].split('/')[0];
+  const stage = methodParts[5].split('/')[1];
+
+  const authResponse = {};
+  authResponse.principalId = token;
+
+  const policyDocument = {};
+  policyDocument.Version = '2012-10-17';
+  policyDocument.Statement = [];
+
+  const statementOne = {};
+  statementOne.Action = 'execute-api:Invoke';
+  statementOne.Effect = effect;
+  statementOne.Resource = `arn:aws:execute-api:${region}:${accountArn}:${apiId}/${stage}/GET/registry*`;
+  policyDocument.Statement[0] = statementOne;
+
+  const statementTwo = {};
+  statementTwo.Action = 'execute-api:Invoke';
+  statementTwo.Effect = isAdmin ? 'Allow' : 'Deny';
+  statementTwo.Resource = `arn:aws:execute-api:${region}:${accountArn}:${apiId}/${stage}/PUT/registry*`;
+  policyDocument.Statement[1] = statementTwo;
+
+  const statementThree = {};
+  statementThree.Action = 'execute-api:Invoke';
+  statementThree.Effect = isAdmin ? 'Allow' : 'Deny';
+  statementThree.Resource = `arn:aws:execute-api:${region}:${accountArn}:${apiId}/${stage}/DELETE/registry*`;
+  policyDocument.Statement[2] = statementThree;
+
+  authResponse.policyDocument = policyDocument;
+
+  return authResponse;
+};
+
+export default async ({ methodArn, authorizationToken }, context, callback) => {
+  const tokenParts = authorizationToken.split('Bearer ');
+
+  if (tokenParts.length <= 1) {
+    return callback(null, generatePolicy({
+      token: authorizationToken,
+      effect: 'Deny',
+      methodArn,
+      isAdmin: false,
+    }));
+  }
+
+  const token = tokenParts[1];
+
+  const parsedUrl = url.parse(process.env.githubUrl);
+  const github = new GitHub({
+    host: parsedUrl.host,
+    protocol: 'https',
+    pathPrefix: parsedUrl.path,
+  });
+
+  github.authenticate({
+    type: 'basic',
+    username: process.env.githubClientId,
+    password: process.env.githubSecret,
+  });
+
+  try {
+    const {
+      user,
+      updated_at,
+      created_at,
+    } = await github.authorization.check({
+      client_id: process.env.githubClientId,
+      access_token: token,
+    });
+
+    let isAdmin = false;
+    let effect = 'Allow';
+    let restrictedOrgs = [];
+
+    if (process.env.restrictedOrgs) {
+      restrictedOrgs = process.env.restrictedOrgs.split(',');
+    }
+
+    if (restrictedOrgs.length) {
+      try {
+        github.authenticate({
+          type: 'token',
+          token,
+        });
+
+        const orgs = await github.users.getOrgMemberships({
+          state: 'active',
+        });
+
+        const usersOrgs = orgs.filter(org => restrictedOrgs.indexOf(org.organization.login) > -1);
+        effect = usersOrgs.length ? 'Allow' : 'Deny';
+      } catch (githubError) {
+        return callback(null, generatePolicy({
+          token: tokenParts[1],
+          effect: 'Deny',
+          methodArn,
+          isAdmin: false,
+        }));
+      }
+    }
+
+    if (process.env.admins) {
+      isAdmin = process.env.admins.split(',').indexOf(user.login) > -1;
+    }
+
+    const policy = generatePolicy({
+      effect,
+      methodArn,
+      token,
+      isAdmin,
+    });
+
+    policy.context = {
+      username: user.login,
+      avatar: user.avatar_url,
+      updatedAt: updated_at,
+      createdAt: created_at,
+    };
+
+    return callback(null, policy);
+  } catch (error) {
+    return callback(null, generatePolicy({
+      token: tokenParts[1],
+      effect: 'Deny',
+      methodArn,
+      isAdmin: false,
+    }));
+  }
+};
+
+```

@@ -1,0 +1,42 @@
+The function `index` is a serverless function (AWS Lambda handler) written in TypeScript that determines the StackJanitor status (enabled or disabled) for a CloudFormation stack based on CloudFormation events.  This status is crucial for determining whether StackJanitor should manage the lifecycle of the resources within the stack.
+
+**1. Implementation Details:**
+
+* **Parameters:** The function takes a single parameter, `event`, of type `CloudFormationEvent`. This event object contains details about a CloudFormation stack operation (create, update, delete, etc.) triggered within AWS.  Crucially, it includes information like `eventName`, `requestParameters` (containing `stackName` and sometimes `tags`), and potentially `errorCode`.
+* **Return Value:**  The function returns a Promise that resolves to an object containing the original `event` and a `results` object. The `results` object has a `stackjanitor` property, which holds the determined `StackStatus` (either "Enabled" or "Disabled").
+* **Logic:**  The function's core logic revolves around determining the `stackjanitor` tag's value associated with the CloudFormation stack.  It handles different CloudFormation event types (`Create`, `Update`, etc.) differently.
+    * For `Create` events, it looks for the `stackjanitor` tag directly within the `event.detail.requestParameters.tags`.
+    * For other event types (like `Update`, `Delete`), it fetches the tags associated with the stack using the AWS CloudFormation API (specifically `DescribeStacksCommand`).
+* **Error Handling:** The function includes error handling for API calls (specifically catching exceptions during the `DescribeStacks` operation). It logs errors and returns a default `stackjanitor` status of "Disabled" if tag retrieval fails.
+* **DynamoDB Interaction (Conditional):**  If the event is an `Update` event and the determined `stackjanitor` status is "Disabled", the function interacts with a DynamoDB table (via helper functions `generateDeleteItem` and `handleDataItem`) to delete the corresponding record for the stack. This indicates that StackJanitor should no longer manage the stack's resources.
+
+
+**2. Relationships:**
+
+* **AWS SDK:** The function directly depends on the AWS SDK for JavaScript (`@aws-sdk/client-cloudformation`) for interacting with the CloudFormation service.
+* **Helper Functions:** The function utilizes several helper functions:
+    * `getTagsFromStacks`: Extracts tags from an array of `Stack` objects returned by the CloudFormation API.
+    * `findTag`: Searches for a specific tag (by key) within an array of tags.
+    * `getStackJanitorStatus`: Determines the `StackStatus` based on the presence and value of the `stackjanitor` tag.
+    * `convertTags`: Converts tags from the AWS SDK format to a custom `CustomTag` format.
+    * `generateDeleteItem`: Creates a DynamoDB item for deletion (used in the `Update` event handling).
+    * `handleDataItem`: Interacts with the DynamoDB table to perform actions (like delete).
+* **Data Types:** The function utilizes custom types like `CloudFormationEvent`, `CustomTag`, `JanitorRecord`, and enums like `StackStatus`, `TagName`, and `Actions`.  These are defined elsewhere in the codebase.
+* **Logger:**  It uses a `logger` object for logging information and errors.
+
+
+**3. Structure:**
+
+The function follows a branched structure based on the `eventName`:
+
+* **Create Event:** Directly extracts tags and determines status.
+* **Other Events:** Fetches tags using the AWS SDK, handles potential API errors, and then determines status. Within this branch, there's a further conditional block for `Update` events where a DynamoDB delete operation might be triggered if the `stackjanitor` status is "Disabled".
+
+
+**4. Purpose and Role:**
+
+The function serves as the entry point for StackJanitor's response to CloudFormation events.  Its primary purpose is to determine whether StackJanitor should manage a given CloudFormation stack's resources. It does so by checking the `stackjanitor` tag's status.  This information is then used downstream by other parts of the StackJanitor system to orchestrate resource lifecycle management.  The function plays a critical role in the initial setup and ongoing management of stacks by StackJanitor.
+
+
+
+This description provides the essential information for another developer to understand and recreate the functionality of the `index` function. While it outlines the core logic and interactions, it leaves room for implementation-specific optimizations and improvements in the rewritten code.

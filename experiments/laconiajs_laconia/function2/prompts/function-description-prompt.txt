@@ -1,0 +1,90 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to describe the serverless function provided below so that another developer may use it to rewrite this function better. Please ensure that it is a detailed description and includes the following details:
+
+1. Implementation details: Describe the logic of the function, its parameters, return values, and any specific algorithms or steps it follows.
+2. Relationships: Explain how this function interacts with other parts of the codebase, including any functions, classes, or modules it depends on or influences.
+3. Structure: Outline the internal structure of the function, including any key blocks of code or conditionals that drive its behavior.
+4. Purpose and Role: Explain the purpose of the function within the system and its importance to the overall functionality.
+
+Ensure that the explanation is clear enough to allow for the function to be recreated from this description, but still flexible enough for the next developer to write code that may be more optimized or clean. Your description should not constrain the implementation more than offering interface details. Do not specify specific steps followed in the code that are an implementational decision, but provide the goal/functionality of the function and a high level view of how it is achieving the goal. The function path and the function code itself (enclosed in triple backticks) are provided below:
+
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/place-order.js
+```JS
+// @ts-check
+const lambdaWarmer = require("@laconia/middleware-lambda-warmer")();
+const laconia = require("@laconia/core");
+const adapterApi = require("@laconia/adapter-api");
+const config = require("@laconia/config");
+const xray = require("@laconia/xray");
+const DynamoDbOrderRepository = require("./DynamoDbOrderRepository");
+const KinesisOrderStream = require("./KinesisOrderStream");
+const UuidIdGenerator = require("./UuidIdGenerator");
+const ValidationError = require("./ValidationError");
+const log = require("pino")();
+
+const validateApiKey = (headers, apiKey) => {
+  if (headers.authorization !== apiKey) {
+    throw new ValidationError("Unauthorized: Wrong API Key");
+  }
+};
+
+const validateRestaurantId = (restaurants, restaurantId) => {
+  if (!restaurants.includes(restaurantId)) {
+    throw new ValidationError(`Invalid restaurant id: ${restaurantId}`);
+  }
+};
+
+const validateEnabledFlag = enabled => {
+  if (!enabled) {
+    throw new Error("Place order lambda is off");
+  }
+};
+
+const instances = ({ env }) => ({
+  orderRepository: new DynamoDbOrderRepository(env.ORDER_TABLE_NAME),
+  idGenerator: new UuidIdGenerator(),
+  orderStream: new KinesisOrderStream(env.ORDER_STREAM_NAME)
+});
+
+const apigateway = adapterApi.apigateway({
+  inputType: "body",
+  includeInputHeaders: true,
+  errorMappings: {
+    ValidationError: () => ({ statusCode: 400 })
+  }
+});
+
+exports.app = async (
+  newOrder,
+  headers,
+  { orderRepository, orderStream, idGenerator, apiKey, restaurants, enabled }
+) => {
+  validateEnabledFlag(enabled);
+  validateApiKey(headers, apiKey);
+  const orderId = idGenerator.generate();
+  const order = Object.assign(
+    {
+      orderId
+    },
+    newOrder.order
+  );
+
+  validateRestaurantId(restaurants, order.restaurantId);
+  log.info(order, "Saving order");
+  await orderRepository.save(order);
+  await orderStream.send({
+    eventType: "placed",
+    orderId,
+    restaurantId: order.restaurantId
+  });
+
+  return { orderId };
+};
+
+const handler = laconia(apigateway(exports.app))
+  .register([config.envVarInstances(), instances])
+  .postProcessor(xray.postProcessor());
+
+exports.handler = lambdaWarmer(handler);
+
+```

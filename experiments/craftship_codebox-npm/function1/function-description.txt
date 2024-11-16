@@ -1,0 +1,44 @@
+## Serverless Function Description: GitHub Authorization
+
+This function acts as an authorizer for an AWS API Gateway, verifying user identity and permissions via GitHub and generating an IAM policy based on the results.
+
+**1. Implementation Details:**
+
+* **Purpose:** This function authenticates users using a GitHub access token and determines their authorization level to access specific API Gateway resources.  It allows read access ("GET") to `/registry*` resources for all authenticated users. Write access ("PUT" and "DELETE") to `/registry*` resources is granted based on two factors: membership in specific GitHub organizations (defined by `restrictedOrgs` environment variable) and/or presence in an admin user list (defined by `admins` environment variable).
+* **Parameters:**
+    * `methodArn`: (String) The Amazon Resource Name (ARN) for the invoked API method. Used for constructing the policy.
+    * `authorizationToken`: (String)  The authorization token passed by the client, expected in the format "Bearer <token>".
+* **Return Value:**  The function returns an IAM policy document via the `callback` function. This policy document dictates which API Gateway resources the user is allowed to access. The policy also contains a context object with user details like username, avatar URL, and timestamps. In case of errors or failed authorization, a "Deny" policy is returned.
+* **Logic:**
+    1. **Token Extraction:** The function extracts the GitHub access token from the `authorizationToken` header. If the header is malformed or missing, a "Deny" policy is immediately returned.
+    2. **GitHub Authentication:** The function authenticates with the GitHub API using a basic authentication scheme with a client ID and secret defined in environment variables (`githubUrl`, `githubClientId`, `githubSecret`).
+    3. **Token Validation:** The function attempts to validate the provided access token against GitHub. If the token is invalid, a "Deny" policy is returned.
+    4. **Organization Membership Check (Conditional):** If the `restrictedOrgs` environment variable is set, the function authenticates with GitHub using the user's token and checks the user's organization memberships against the list of restricted organizations. If the user belongs to at least one of the restricted organizations, they are granted access. Otherwise, access is denied.
+    5. **Admin Check (Conditional):** If the `admins` environment variable is set, the function checks if the authenticated user's login exists within the list of admin users. If so, the user is granted admin privileges, allowing them write access.
+    6. **Policy Generation:** Based on the results of the previous checks, the function generates an IAM policy. The policy grants "Allow" effect for "GET" requests to `/registry*` for all authenticated users. The "PUT" and "DELETE" requests to `/registry*` are either allowed or denied based on organization membership and admin status. The policy also includes a context object with user details fetched from GitHub.
+    7. **Callback Invocation:** The generated policy is returned via the provided `callback` function.
+
+
+
+**2. Relationships:**
+
+* **Dependencies:** The function depends on the `@octokit/rest` library for interacting with the GitHub API and the `url` module for parsing URLs. It also relies on environment variables (`githubUrl`, `githubClientId`, `githubSecret`, `restrictedOrgs`, `admins`) for configuration.
+* **Interaction:**  This function is intended to be used as an AWS API Gateway custom authorizer.  It receives the request context from API Gateway, including the authorization token. The function's output (the generated IAM policy) is then used by API Gateway to determine whether to allow or deny the request.
+
+
+**3. Structure:**
+
+The function follows this basic structure:
+
+1. **Token Handling:**  Extracts and validates the GitHub access token from the `authorizationToken` header.
+2. **GitHub API Interaction:** Uses the `@octokit/rest` library to communicate with GitHub, performing authentication, token validation, and organization membership checks.
+3. **Authorization Logic:**  Determines user authorization based on token validation, organization membership (if applicable), and admin status (if applicable).
+4. **Policy Generation:** Constructs the IAM policy based on authorization results, using the `generatePolicy` helper function.
+5. **Callback:** Returns the generated policy (or a denial policy) via the `callback` function.
+
+**4. Purpose and Role:**
+
+This function serves as a crucial security component, controlling access to protected API Gateway resources. It integrates with GitHub for user authentication and authorization, ensuring that only authorized users can perform specific actions on the API.  By dynamically generating IAM policies based on user context, it provides granular control over access permissions.  The function is designed as a reusable component within a serverless architecture.
+
+
+This description should allow a developer to rewrite the function with potentially better optimization or a cleaner structure while adhering to the required functionality and interface expectations.

@@ -1,0 +1,6 @@
+Repo,Function Num,Prompt Type,Model,Average CC,CCs
+StackJanitor,1,type2,GPT-3_5-Turbo,4.333333333333333,"[3, 4, 6]"
+laconiajs_laconia,2,type3,GPT-4,6.333333333333333,"[6, 5, 8]"
+JuliaRegistries_TagBot,1,type1,DeepSeek-Coder-V2,17.0,"[18, 17, 16]"
+craftship_codebox-npm,2,type3,CodeQwen1_5-7B-Chat,3.3333333333333335,"[3, 4, 3]"
+JuliaRegistries_TagBot,1,type2,Artigenz-Coder-DS-6_7B,15.0,"[15, 16, 14]"

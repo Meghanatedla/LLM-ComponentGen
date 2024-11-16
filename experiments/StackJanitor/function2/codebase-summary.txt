@@ -1,0 +1,78 @@
+The codebase is written in TypeScript and implements a serverless application for managing the lifecycle of AWS CloudFormation stacks. It leverages AWS Lambda functions triggered by various events like DynamoDB streams, API Gateway requests (for webhooks), and CloudFormation events.  The core functionality revolves around tagging stacks for automated deletion based on defined expiration periods.
+
+Here's a detailed breakdown:
+
+**1. High-Level Overview:**
+
+The application automates the deletion of CloudFormation stacks based on their age, tags, and Git events (like merging or declining pull requests). It uses DynamoDB to store stack information and track their expiration times. Different Lambda functions handle specific parts of this lifecycle: monitoring stack creation/updates, deleting expired stacks, and reacting to Git webhooks.
+
+**2. Important Functions and Modules:**
+
+* **`/src/handlers/deleteCloudFormationStack.ts`**: This module handles the deletion of CloudFormation stacks.
+    * **`index(event: DynamoDBStreamEvent)`**:  This is the main handler function, triggered by DynamoDB streams. It processes `REMOVE` events from the DynamoDB table, indicating a stack is scheduled for deletion. It parses the event data to extract stack information and calls `deleteCloudFormationStack` to initiate the deletion process.
+    * **`deleteCloudFormationStack(item: DataItem)`**: This function checks if the "stackjanitor" tag is enabled for the given stack. If enabled, it calls the `deleteStack` function from the `cloudformation` module. It handles `StackJanitorNotEnabledError` and `ValidationError`. It also implements retry logic with exponential backoff for handling temporary errors during stack deletion.  It recreates the DynamoDB record with a longer TTL based on the `deleteCount` if the deletion fails, but stops retrying after a configured maximum number of retries (`config.MAX_CLEANUP_RETRY`).
+    * **`processRecords(records: ParsedRecord<DataItem>[])`**: Iterates through DynamoDB stream records and filters for `REMOVE` events with existing `oldData`. It extracts event details and logs information about the processing status. For valid deletion records, it calls `deleteCloudFormationStack` to initiate the deletion process.
+    * **`isStackJanitorEnabled(tags: CustomTag[])`**: Checks if the `stackjanitor` tag is enabled (value is "enabled") in the provided tags array.
+* **`/src/handlers/gitHook.ts`**: This module manages stack deletion triggered by Git webhooks (Bitbucket and GitHub).
+    * **`index(event: APIGatewayEvent)`**: The entry point for API Gateway events, triggered by incoming webhooks. It parses the request body and determines whether it's a Bitbucket or GitHub event. It invokes the corresponding event handler or optionally calls an external lambda if `process.env.EXTERNAL_LAMBDA` is defined.
+    * **`bitBucketEventHandler(eventData: BitbucketWebhookEvent)`**: Handles Bitbucket webhook events. It checks if the pull request state is "MERGED" or "DECLINED".  If so, it extracts the repository and branch information and calls `findAndDeleteStacksFromTag`.
+    * **`gitHubEventHandler(eventData: GithubWebhookEvent)`**: Handles GitHub webhook events. It checks if the pull request is merged. If so, it extracts repository and branch information and calls `findAndDeleteStacksFromTag`.
+    * **`findAndDeleteStacksFromTag(gitTag: GitTag)`**: Queries DynamoDB for stacks matching the given repository and branch tags using `findStacksFromTag` helper function.  It then calls `deleteStacks` to delete the matching stacks.
+    * **`deleteStacks(stacks: DataItem[])`**: Iterates through the list of stacks and calls `deleteDynamoRow` for each to delete the corresponding DynamoDB entry, triggering the actual stack deletion via the DynamoDB stream.
+    * **`bitbucketEventParser(eventData: BitbucketWebhookEvent)`**: Parses a Bitbucket webhook event and extracts the repository name and branch name.
+    * **`gitHubEventParser(eventData: GithubWebhookEvent)`**: Parses a GitHub webhook event and extracts the repository name and branch name.
+    * **`isBitbucketEvent(event: any)`**: Type guard function that checks if the provided event is a Bitbucket webhook event.
+    * **`isGithubEvent(event: any)`**: Type guard function that checks if the provided event is a GitHub webhook event.
+    * **`isInDesiredState(state: State)`**: Checks if the given pull request state is "MERGED" or "DECLINED".
+* **`/src/handlers/monitorCloudFormationStack.ts`**: This module monitors CloudFormation events and updates the DynamoDB table accordingly.
+    * **`index(stackJanitorStatus: StackJanitorStatus)`**: The main handler function, triggered by CloudFormation events. It calls `monitorCloudFormationStack` to process the event.
+    * **`monitorCloudFormationStack(event: CloudFormationEvent, dataMapper: Entity)`**: Processes CloudFormation events ("CreateStack", "UpdateStack", "DeleteStack"). It generates a data item or delete item based on the event type and calls `handleDataItem` to perform the corresponding DynamoDB operation.
+    * **`generateItemFromEvent(event: CloudFormationEvent)`**: Creates a `DataItem` object from a CloudFormation event. This includes extracting the stack name, ID, tags, and calculating the expiration time based on `config.DEFAULT_EXPIRATION_PERIOD`.
+    * **`generateDeleteItem(event: CloudFormationEvent)`**: Creates a `DeleteItem` object from a CloudFormation event, preparing the data for deleting a stack entry from DynamoDB.
+    * **`generateRepeatedDeleteItem(oldItem: DataItem)`**: Creates a new `DataItem` for retrying a stack deletion with an updated expiration time based on the number of previous attempts.
+    * **`handleDataItem(item: DataItem | DeleteItem, handler: Entity, action: Actions)`**: Performs DynamoDB operations (put, delete, get, update) based on the provided action. Uses the `dynamodb-toolbox` library for interacting with DynamoDB.
+    * **`getExpirationTime(eventTime: string)`**: Calculates the expiration time in Epoch seconds based on the provided event time and `config.DEFAULT_EXPIRATION_PERIOD`.
+* **`/src/handlers/dynamoParser.ts`**: This module provides utility functions for parsing DynamoDB stream events.
+    * **`parseEventRecords<T>(event: DynamoDBStreamEvent)`**: Parses DynamoDB stream events and extracts relevant data, including new and old images, event name, and event ID. Filters out MODIFY events without any actual data changes. It uses `unmarshallStream` to convert DynamoDB items into plain JavaScript objects.
+    * **`unmarshallStream<T>(record: DynamoDBRecord)`**: Unmarshalls new and old images from a DynamoDB stream record using the `unmarshall` helper function.
+
+* **`/src/optional-handlers/searchDeleteCloudformationStack.ts`**: This module offers an optional Lambda function for proactively searching and deleting expired stacks.
+    * **`handler()`**: This function describes all CloudFormation stacks, filters for those with the "stackjanitor" tag enabled and past their expiration date, and then deletes them.
+
+* **`/src/optional-handlers/*utils/*`**:  This directory contains utility functions for the optional handler.
+
+
+**3. External Dependencies:**
+
+* **`aws-sdk`**: Used for interacting with various AWS services (CloudFormation, DynamoDB, Lambda).
+* **`dynamodb-toolbox`**: Simplifies DynamoDB interactions.
+* **`stackjanitor`**: Provides shared types and interfaces.
+* **`pino`**:  Logging library.
+* **`lodash`**: Utility library.
+* **`jest`**: Used for unit testing.
+* **`aws-sdk-client-mock`**:  Used for mocking AWS SDK clients in tests.
+* **`sinon`**: Used for creating stubs and spies in tests.
+
+
+**4. Codebase Structure:**
+
+The codebase follows a modular structure with separate handlers for different event sources.  The `src/handlers` directory contains the core Lambda functions, while `src/optional-handlers` contains optional functionalities.  Utility functions are grouped within `src/helpers` and `src/optional-handlers/utils`. Test files are located alongside the source files with a `.test.ts` extension. The project uses Jest for testing.
+
+**5. Data Flow and Module Interactions:**
+
+* **CloudFormation Event -> `monitorCloudFormationStack`**: CloudFormation events trigger the `monitorCloudFormationStack` function, which updates DynamoDB with stack information and expiration times.
+* **DynamoDB Stream (REMOVE) -> `deleteCloudFormationStack`**:  When a stack's expiration time is reached, a `REMOVE` event in the DynamoDB stream triggers the `deleteCloudFormationStack` function, which deletes the corresponding CloudFormation stack.
+* **API Gateway (Webhook) -> `gitHook`**: Git webhooks (Bitbucket, GitHub) trigger the `gitHook` function, which identifies and deletes stacks associated with merged or declined pull requests based on tags.
+* **`deleteCloudFormationStack`, `gitHook` -> `cloudformation.deleteStack`**: Both `deleteCloudFormationStack` and `gitHook` ultimately use the `deleteStack` function from the `cloudformation` module to interact with AWS CloudFormation.
+* **`monitorCloudFormationStack`, `deleteCloudFormationStack` -> `DynamoDataModel`**: These modules use the entities defined in `DynamoDataModel` to interact with the DynamoDB table.
+* **Throughout Codebase -> `logger`**:  The `pino` logger is used throughout the codebase for structured logging.
+
+**Additional Notes and Practices:**
+
+* All handlers follow a similar structure with an `index` function as the entry point.
+* The `dynamodb-toolbox` library is used for easier DynamoDB interactions.
+* Error handling is implemented to catch and log errors during stack deletion, and a retry mechanism is in place for specific error types.
+* Configuration values are stored in a `config` module.
+
+
+This summary provides a good understanding of the codebase for developers who need to extend it with more functionalities. They should follow the existing structure when adding new functions and use the established patterns for interacting with AWS services and logging information.

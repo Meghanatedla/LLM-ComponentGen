@@ -1,0 +1,2525 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to summarize the entire codebase provided below so that other developers may use it when adding more functions to this codebase. Please ensure that it is a detailed summary and includes the following details:
+
+1. A high-level overview of the main functionalities offered by the codebase, highlighting key modules or components.
+2. A breakdown of important functions and what specific tasks or executions they handle.
+3. Identify any external dependencies, libraries, or frameworks the code relies on, and describe how they are integrated into the codebase.
+4. Describe the overall structure of the codebase (e.g., how files are organized, major classes or modules).
+5. Explain any relationships or interactions between different modules or components, such as how data flows between them. 
+
+Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/calculate-total-order.js
+```JS
+// @ts-check
+const laconiaBatch = require("@laconia/batch");
+const DynamoDbOrderRepository = require("./DynamoDbOrderRepository");
+const S3TotalOrderStorage = require("./S3TotalOrderStorage");
+
+const instances = ({ env, s3 }) => ({
+  orderRepository: new DynamoDbOrderRepository(env.ORDER_TABLE_NAME),
+  totalOrderStorage: new S3TotalOrderStorage(s3, env.TOTAL_ORDER_BUCKET_NAME)
+});
+
+exports.handler = laconiaBatch(
+  _ =>
+    laconiaBatch.s3({
+      path: ".",
+      s3Params: {
+        Bucket: process.env.RESTAURANT_BUCKET_NAME,
+        Key: "restaurants.json"
+      }
+    }),
+  { itemsPerSecond: 2 }
+)
+  .register(instances)
+  .on("item", async ({ orderRepository, totalOrderStorage }, restaurantId) => {
+    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    await totalOrderStorage.put("json", {
+      restaurantId,
+      total: orders.reduce((acc, order) => acc + order.total, 0)
+    });
+  });
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/S3TotalOrderStorage.js
+```JS
+const pWaitFor = require("p-wait-for");
+
+module.exports = class S3TotalOrderStorage {
+  constructor(s3, bucket) {
+    this.s3 = s3;
+    this.bucket = bucket;
+  }
+
+  async put(type, totalOrder) {
+    const body = type === "json" ? JSON.stringify(totalOrder) : totalOrder;
+    return this.s3
+      .putObject({
+        Bucket: this.bucket,
+        Key: `${type}/${Date.now()}`,
+        Body: body
+      })
+      .promise();
+  }
+
+  async clearAll() {
+    const objects = await this.s3
+      .listObjects({
+        Bucket: this.bucket
+      })
+      .promise();
+    return Promise.all(
+      objects.Contents.map(t =>
+        this.s3
+          .deleteObject({
+            Bucket: this.bucket,
+            Key: t.Key
+          })
+          .promise()
+      )
+    );
+  }
+
+  async getAll(type) {
+    const objects = await this.s3
+      .listObjects({
+        Bucket: this.bucket,
+        Prefix: type
+      })
+      .promise();
+    return Promise.all(
+      objects.Contents.map(t =>
+        this.s3
+          .getObject({
+            Bucket: this.bucket,
+            Key: t.Key
+          })
+          .promise()
+      )
+    ).then(results => {
+      return results.map(result =>
+        type === "json"
+          ? JSON.parse(result.Body.toString())
+          : result.Body.toString()
+      );
+    });
+  }
+
+  async getTotal(type) {
+    const objects = await this.s3
+      .listObjects({
+        Bucket: this.bucket,
+        Prefix: type
+      })
+      .promise();
+    return Number(objects.Contents.length);
+  }
+
+  waitUntil(type, totalObjects) {
+    return pWaitFor(async () => (await this.getTotal(type)) >= totalObjects);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/update-user-receipt.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const adapterApi = require("@laconia/adapter-api");
+const WebSocketClient = require("./WebSocketClient");
+
+const instances = ({ event, env }) => ({
+  wsClient: new WebSocketClient(
+    env.WEBSOCKET_ENDPOINT,
+    event.requestContext.connectionId
+  )
+});
+
+const app = async (message, { wsClient }) => {
+  if (message.body.message === "order received") {
+    return wsClient.send({ message: "thank you for your order" });
+  }
+};
+
+const webSocket = adapterApi.webSocket();
+
+exports.handler = laconia(webSocket(app)).register(instances, {
+  cache: { enabled: false }
+});
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/notify-user.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const kinesis = require("@laconia/adapter").kinesis();
+const AWS = require("aws-sdk");
+
+const app = async (orderEvents, { env }) => {
+  const acceptedEvents = orderEvents.filter(o => o.eventType === "accepted");
+  console.log("acceptedEvents", acceptedEvents);
+  const sqs = new AWS.SQS();
+  return Promise.all(
+    acceptedEvents.map(e =>
+      sqs
+        .sendMessage({
+          QueueUrl: env.USER_EMAIL_QUEUE_URL,
+          MessageBody: JSON.stringify(e)
+        })
+        .promise()
+    )
+  );
+};
+
+exports.handler = laconia(kinesis(app));
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/download-image.js
+```JS
+const fs = require("fs");
+const laconia = require("@laconia/core");
+const adapterApi = require("@laconia/adapter-api");
+
+const apigateway = adapterApi.apigateway({
+  responseAdditionalHeaders: {
+    "Content-Type": "image/png"
+  }
+});
+const imgPath = `${__dirname}/resources/2_vertical@0.5x.png`;
+
+exports.app = () => fs.readFileSync(imgPath);
+
+exports.handler = laconia(apigateway(exports.app));
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/convert-total-order-to-xml.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const s3 = require("@laconia/adapter").s3();
+const S3TotalOrderStorage = require("./S3TotalOrderStorage");
+
+const app = async (totalOrder, { totalOrderStorage }) => {
+  await totalOrderStorage.put(
+    "xml",
+    `<TotalOrder><RestaurantId>${totalOrder.restaurantId}</RestaurantId><Total>${totalOrder.total}</Total></TotalOrder>`
+  );
+};
+
+exports.handler = laconia(s3(app)).register(
+  "totalOrderStorage",
+  ({ s3, env }) => new S3TotalOrderStorage(s3, env.TOTAL_ORDER_BUCKET_NAME)
+);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/KinesisOrderStream.js
+```JS
+const AWS = require("aws-sdk");
+
+module.exports = class KinesisOrderStream {
+  constructor(streamName) {
+    this.streamName = streamName;
+  }
+
+  send(orderEvent) {
+    const kinesis = new AWS.Kinesis();
+
+    return kinesis
+      .putRecord({
+        Data: JSON.stringify(orderEvent),
+        PartitionKey: orderEvent.orderId,
+        StreamName: process.env.ORDER_STREAM_NAME
+      })
+      .promise();
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/SnsRestaurantNotificationTopic.js
+```JS
+module.exports = class SnsRestaurantNotificationTopic {
+  constructor(sns, snsArn) {
+    this.sns = sns;
+    this.snsArn = snsArn;
+  }
+
+  publish(order) {
+    const snsParams = {
+      Message: JSON.stringify(order),
+      TopicArn: this.snsArn
+    };
+    return this.sns.publish(snsParams).promise();
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/DynamoDbWebSocketServer.js
+```JS
+const AWS = require("aws-sdk");
+const WebSocketClient = require("./WebSocketClient");
+
+module.exports = class DynamoDbWebSocketServer {
+  constructor(connectionTableName, endpoint) {
+    this.connectionTableName = connectionTableName;
+    this.DDB = new AWS.DynamoDB();
+    this.documentClient = new AWS.DynamoDB.DocumentClient();
+    this.endpoint = endpoint;
+  }
+
+  addConnection(connectionId) {
+    const putParams = {
+      TableName: this.connectionTableName,
+      Item: { connectionId }
+    };
+
+    return this.documentClient.put(putParams).promise();
+  }
+
+  removeConnection(connectionId) {
+    const deleteParams = {
+      TableName: this.connectionTableName,
+      Key: { connectionId }
+    };
+
+    return this.documentClient.delete(deleteParams).promise();
+  }
+
+  async broadcast(message) {
+    const data = await this.documentClient
+      .scan({
+        TableName: this.connectionTableName
+      })
+      .promise();
+
+    return Promise.all(
+      data.Items.map(item =>
+        new WebSocketClient(this.endpoint, item.connectionId).send(message)
+      )
+    );
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/capture-card-payment.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const { spy } = require("@laconia/test");
+
+exports.app = async event => {
+  if (!event.paymentReference) {
+    throw new Error("paymentReference is required");
+  }
+};
+
+exports.handler = laconia(spy(exports.app)).register(spy.instances());
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/ValidationError.js
+```JS
+module.exports = class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = this.constructor.name;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/fake-restaurant.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const sns = require("@laconia/adapter").sns();
+const axios = require("axios").default;
+
+const app = async (order, { env }) => {
+  console.log("order", order);
+  if (order.restaurantId === 1) {
+    const acceptUrl = `${env.API_BASE_URL}/order/${order.orderId}/accept`;
+    console.log(`Accepting order ${JSON.stringify(order)} at ${acceptUrl}`);
+    try {
+      await axios.put(acceptUrl);
+    } catch (e) {
+      if (e.response) {
+        console.error("Error from server", e.response.data);
+      }
+      throw e;
+    }
+  }
+};
+
+exports.handler = laconia(sns(app));
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/update-user.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const kinesis = require("@laconia/adapter").kinesis();
+const DynamoDbWebSocketServer = require("./DynamoDbWebSocketServer");
+
+const app = async (orderEvents, { webSocketServer }) => {
+  const acceptedEvents = orderEvents.filter(o => o.eventType === "accepted");
+  if (acceptedEvents.length > 0) {
+    return webSocketServer.broadcast({ message: "order accepted" });
+  }
+};
+
+exports.handler = laconia(kinesis(app)).register(() => ({
+  webSocketServer: new DynamoDbWebSocketServer(
+    process.env.CONNECTION_TABLE_NAME,
+    process.env.WEBSOCKET_ENDPOINT
+  )
+}));
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/send-email.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const sqs = require("@laconia/adapter").sqs();
+const { spy } = require("@laconia/test");
+
+const app = async orderEvents => {
+  console.log(orderEvents);
+};
+
+exports.handler = laconia(sqs(spy(app))).register(spy.instances());
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/UuidIdGenerator.js
+```JS
+const uuidv4 = require("uuid/v4");
+
+module.exports = class UuidIdGenerator {
+  generate() {
+    return uuidv4();
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/disconnect-websocket.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const { res } = require("@laconia/event").apigateway;
+const DynamoDbWebSocketServer = require("./DynamoDbWebSocketServer");
+
+const app = async (connectionId, { webSocketServer }) => {
+  return webSocketServer.removeConnection(connectionId);
+};
+
+const adapter = app => async (event, laconiaContext) => {
+  await app(event.requestContext.connectionId, laconiaContext);
+  return res("success", 200);
+};
+
+exports.handler = laconia(adapter(app)).register(
+  "webSocketServer",
+  () => new DynamoDbWebSocketServer(process.env.CONNECTION_TABLE_NAME)
+);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/sts.js
+```JS
+const { STS } = require("aws-sdk");
+const sts = new STS();
+
+exports.getAccountId = async () => {
+  const { Account } = await sts.getCallerIdentity().promise();
+  return Account;
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/connect-websocket.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const { res } = require("@laconia/event").apigateway;
+const DynamoDbWebSocketServer = require("./DynamoDbWebSocketServer");
+
+const app = async (connectionId, { webSocketServer }) => {
+  return webSocketServer.addConnection(connectionId);
+};
+
+const adapter = app => async (event, laconiaContext) => {
+  await app(event.requestContext.connectionId, laconiaContext);
+  return res("success", 200);
+};
+
+exports.handler = laconia(adapter(app)).register(
+  "webSocketServer",
+  () => new DynamoDbWebSocketServer(process.env.CONNECTION_TABLE_NAME)
+);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/DynamoDbOrderRepository.js
+```JS
+const AWS = require("aws-sdk");
+
+module.exports = class DynamoDbOrderRepository {
+  constructor(tableName) {
+    this.tableName = tableName;
+    this.documentClient = new AWS.DynamoDB.DocumentClient();
+  }
+
+  save(order) {
+    const params = {
+      TableName: this.tableName,
+      Item: order
+    };
+    return this.documentClient.put(params).promise();
+  }
+
+  async find(orderId) {
+    const params = {
+      TableName: this.tableName,
+      KeyConditionExpression: "orderId = :orderId",
+      ExpressionAttributeValues: {
+        ":orderId": orderId
+      }
+    };
+
+    const data = await this.documentClient.query(params).promise();
+    return data.Items[0];
+  }
+
+  async findAll() {
+    const params = {
+      TableName: this.tableName
+    };
+
+    const data = await this.documentClient.scan(params).promise();
+    return data.Items;
+  }
+
+  async findByRestaurantId(restaurantId) {
+    const orders = await this.findAll();
+    return orders.filter(order => order.restaurantId === restaurantId);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/notify-restaurant.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const { kinesis } = require("@laconia/event");
+const SnsRestaurantNotificationTopic = require("./SnsRestaurantNotificationTopic");
+
+const adapter = app => (event, dependencies) => {
+  const orderEvents = kinesis(event).records.map(r => r.jsonData);
+  return app(orderEvents, dependencies);
+};
+
+const app = async (orderEvents, { restaurantNotificationTopic }) => {
+  return Promise.all(
+    orderEvents
+      .filter(o => o.eventType === "placed")
+      .map(o => restaurantNotificationTopic.publish(o))
+  );
+};
+
+exports.handler = laconia(adapter(app)).register(
+  "restaurantNotificationTopic",
+  ({ sns, env }) =>
+    new SnsRestaurantNotificationTopic(
+      sns,
+      env.RESTAURANT_NOTIFICATION_TOPIC_ARN
+    )
+);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/WebSocketClient.js
+```JS
+const AWS = require("aws-sdk");
+
+const ensureApiGatewayManagementApi = require("aws-apigatewaymanagementapi");
+
+ensureApiGatewayManagementApi(AWS);
+
+module.exports = class WebSocketClient {
+  constructor(endpoint, connectionId) {
+    this.client = new AWS.ApiGatewayManagementApi({
+      apiVersion: "2018-11-29",
+      endpoint: endpoint
+    });
+    this.connectionId = connectionId;
+  }
+
+  send(message) {
+    console.log("Sending to websocket client", this.connectionId, message);
+    return this.client
+      .postToConnection({
+        ConnectionId: this.connectionId,
+        Data: JSON.stringify(message)
+      })
+      .promise();
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/process-card-payments.js
+```JS
+// @ts-check
+const invoker = require("@laconia/invoker");
+const xray = require("@laconia/xray");
+const laconiaBatch = require("@laconia/batch");
+
+exports.handler = laconiaBatch(
+  _ =>
+    laconiaBatch.dynamoDb({
+      operation: "SCAN",
+      dynamoDbParams: {
+        TableName: process.env.ORDER_TABLE_NAME
+      }
+    }),
+  { itemsPerSecond: 2 }
+)
+  .register(invoker.envVarInstances())
+  .postProcessor(xray.postProcessor())
+  .on("item", ({ captureCardPayment }, item) =>
+    captureCardPayment.fireAndForget({
+      paymentReference: item.paymentReference
+    })
+  );
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/accept-order.js
+```JS
+// @ts-check
+const laconia = require("@laconia/core");
+const { req, res } = require("@laconia/event").apigateway;
+const KinesisOrderStream = require("./KinesisOrderStream");
+
+const instances = ({ env }) => ({
+  orderStream: new KinesisOrderStream(env.ORDER_STREAM_NAME)
+});
+
+const withCors = next => async (...args) => {
+  const response = await next(...args);
+  response.headers["Access-Control-Allow-Origin"] = "*";
+  return response;
+};
+
+const adapter = app =>
+  withCors(async (event, dependencies) => {
+    try {
+      const id = req(event).params.id;
+      const output = await app(id, dependencies);
+      return res(output);
+    } catch (err) {
+      return res(err.message, 500);
+    }
+  });
+
+const app = async (id, { orderStream }) => {
+  await orderStream.send({ eventType: "accepted", orderId: id });
+  return { status: "ok" };
+};
+
+exports.handler = laconia(adapter(app)).register(instances);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3StreamInputConverter.js
+```JS
+const { s3 } = require("@laconia/event");
+
+module.exports = class S3StreamInputConverter {
+  constructor(s3) {
+    this.s3 = s3;
+  }
+
+  convert(event) {
+    const s3Event = s3(event, this.s3);
+    return s3Event.getStream();
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/DynamoDbStreamJsonInputConverter.js
+```JS
+const { dynamodb } = require("@laconia/event");
+
+module.exports = class DynamoDbStreamJsonInputConverter {
+  convert(event) {
+    return dynamodb(event).records.map(r => r.jsonNewImage);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/createS3EventAdapter.js
+```JS
+const S3EventAdapter = require("./S3EventAdapter");
+const S3JsonInputConverter = require("./S3JsonInputConverter");
+const S3StreamInputConverter = require("./S3StreamInputConverter");
+
+const createInputConverter = inputType => {
+  if (inputType === "object") {
+    return new S3JsonInputConverter();
+  } else if (inputType === "stream") {
+    return new S3StreamInputConverter();
+  } else {
+    throw new Error("Unsupported inputType: " + inputType);
+  }
+};
+
+const createS3Adapter = ({
+  inputType = "object",
+  functional = true
+} = {}) => app => {
+  const adapter = new S3EventAdapter(app, createInputConverter(inputType));
+  return functional ? adapter.toFunction() : adapter;
+};
+
+module.exports = createS3Adapter;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/createEventAdapter.js
+```JS
+const EventAdapter = require("./EventAdapter");
+
+const createEventAdapter = inputConverter => ({
+  functional = true
+} = {}) => app => {
+  const adapter = new EventAdapter(app, inputConverter);
+  return functional ? adapter.toFunction() : adapter;
+};
+
+module.exports = createEventAdapter;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3JsonInputConverter.js
+```JS
+const { s3 } = require("@laconia/event");
+
+module.exports = class S3JsonInputConverter {
+  constructor(s3) {
+    this.s3 = s3;
+  }
+
+  async convert(event) {
+    const s3Event = s3(event, this.s3);
+    return s3Event.getJson();
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/EventAdapter.js
+```JS
+module.exports = class EventAdapter {
+  constructor(app, inputConverter) {
+    this.app = app;
+    this.inputConverter = inputConverter;
+  }
+
+  async handle(event, laconiaContext) {
+    const input = await this.inputConverter.convert(event);
+    return this.app(input, laconiaContext);
+  }
+
+  toFunction() {
+    return this.handle.bind(this);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3EventAdapter.js
+```JS
+const EventAdapter = require("./EventAdapter");
+
+module.exports = class S3EventAdapter extends EventAdapter {
+  async handle(event, laconiaContext) {
+    this.inputConverter.s3 = laconiaContext.$s3;
+    return super.handle(event, laconiaContext);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/SqsJsonInputConverter.js
+```JS
+const { sqs } = require("@laconia/event");
+
+module.exports = class SnsJsonInputConverter {
+  convert(event) {
+    return sqs(event).records.map(r => r.body);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/SnsJsonInputConverter.js
+```JS
+const { sns } = require("@laconia/event");
+
+module.exports = class SnsJsonInputConverter {
+  convert(event) {
+    return sns(event).message;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/KinesisJsonInputConverter.js
+```JS
+const { kinesis } = require("@laconia/event");
+
+module.exports = class KinesisJsonInputConverter {
+  convert(event) {
+    return kinesis(event).records.map(r => r.jsonData);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/index.js
+```JS
+const KinesisJsonInputConverter = require("./KinesisJsonInputConverter");
+const DynamoDbStreamJsonInputConverter = require("./DynamoDbStreamJsonInputConverter");
+const SnsJsonInputConverter = require("./SnsJsonInputConverter");
+const SqsJsonInputConverter = require("./SqsJsonInputConverter");
+const createS3EventAdapter = require("./createS3EventAdapter");
+const createEventAdapter = require("./createEventAdapter");
+
+exports.sns = createEventAdapter(new SnsJsonInputConverter());
+exports.sqs = createEventAdapter(new SqsJsonInputConverter());
+exports.kinesis = createEventAdapter(new KinesisJsonInputConverter());
+exports.dynamodb = createEventAdapter(new DynamoDbStreamJsonInputConverter());
+
+exports.s3 = createS3EventAdapter;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayNameMappingErrorConverter.js
+```JS
+const { res } = require("@laconia/event").apigateway;
+
+const getMappingEntries = mappings =>
+  mappings instanceof Map ? mappings.entries() : Object.entries(mappings);
+
+const getMappingResponse = (mappings, error) => {
+  let mappingResponse = {};
+  for (const [errorRegex, mapping] of getMappingEntries(mappings)) {
+    if (error.name.match(errorRegex) || error.message.match(errorRegex)) {
+      mappingResponse = mapping(error);
+      break;
+    }
+  }
+  return mappingResponse;
+};
+
+module.exports = class ApiGatewayNameMappingErrorConverter {
+  constructor({ additionalHeaders = {}, mappings = {} } = {}) {
+    this.additionalHeaders = additionalHeaders;
+    this.mappings = mappings;
+  }
+
+  convert(error) {
+    const mappingResponse = getMappingResponse(this.mappings, error);
+    const body = mappingResponse.body || error.message;
+    const statusCode = mappingResponse.statusCode || error.statusCode || 500;
+    const headers = Object.assign(
+      this.additionalHeaders,
+      mappingResponse.headers
+    );
+    return res(body, statusCode, headers);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayEventAdapter.js
+```JS
+module.exports = class ApiGatewayEventAdapter {
+  constructor(
+    app,
+    inputConverter,
+    outputConverter,
+    errorConverter,
+    includeInputHeaders
+  ) {
+    this.app = app;
+    this.inputConverter = inputConverter;
+    this.outputConverter = outputConverter;
+    this.errorConverter = errorConverter;
+    this.includeInputHeaders = includeInputHeaders;
+  }
+
+  async handle(event, laconiaContext) {
+    const input = await this.inputConverter.convert(event);
+    try {
+      const output = this.includeInputHeaders
+        ? await this.app(input.payload, input.headers, laconiaContext)
+        : await this.app(input.payload, laconiaContext);
+      return this.outputConverter.convert(output);
+    } catch (error) {
+      return this.errorConverter.convert(error);
+    }
+  }
+
+  toFunction() {
+    return this.handle.bind(this);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayParamsInputConverter.js
+```JS
+const { req } = require("@laconia/event").apigateway;
+
+module.exports = class ApiGatewayParamsInputConverter {
+  convert(event) {
+    const apiGatewayEvent = req(event);
+    return {
+      payload: Object.assign(
+        { body: apiGatewayEvent.body },
+        apiGatewayEvent.params
+      ),
+      headers: apiGatewayEvent.headers
+    };
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/createApiGatewayAdapter.js
+```JS
+const ApiGatewayEventAdapter = require("./ApiGatewayEventAdapter");
+const ApiGatewayBodyInputConverter = require("./ApiGatewayBodyInputConverter");
+const ApiGatewayParamsInputConverter = require("./ApiGatewayParamsInputConverter");
+const ApiGatewayOutputConverter = require("./ApiGatewayOutputConverter");
+const ApiGatewayNameMappingErrorConverter = require("./ApiGatewayNameMappingErrorConverter");
+
+const createInputConverter = inputType => {
+  if (!["body", "params"].includes(inputType)) {
+    throw new Error("Unsupported inputType: " + inputType);
+  }
+  return inputType === "body"
+    ? new ApiGatewayBodyInputConverter()
+    : new ApiGatewayParamsInputConverter();
+};
+
+const createApiAgatewayAdapter = ({
+  inputType = "body",
+  functional = true,
+  includeInputHeaders = false,
+  responseStatusCode,
+  responseAdditionalHeaders,
+  errorMappings
+} = {}) => app => {
+  const adapter = new ApiGatewayEventAdapter(
+    app,
+    createInputConverter(inputType),
+    new ApiGatewayOutputConverter({
+      statusCode: responseStatusCode,
+      additionalHeaders: responseAdditionalHeaders
+    }),
+    new ApiGatewayNameMappingErrorConverter({
+      additionalHeaders: responseAdditionalHeaders,
+      mappings: errorMappings
+    }),
+    includeInputHeaders
+  );
+  return functional ? adapter.toFunction() : adapter;
+};
+
+module.exports = createApiAgatewayAdapter;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayOutputConverter.js
+```JS
+const { res } = require("@laconia/event").apigateway;
+
+module.exports = class ApiGatewayOutputConverter {
+  constructor({ statusCode = 200, additionalHeaders = {} } = {}) {
+    this.statusCode = statusCode;
+    this.additionalHeaders = additionalHeaders;
+  }
+
+  convert(output) {
+    return res(output, this.statusCode, this.additionalHeaders);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/createWebSocketAdapter.js
+```JS
+const { res, parseWebSocket } = require("@laconia/event").apigateway;
+
+const createWebSocketAdapter = () => app => async (event, laconiaContext) => {
+  try {
+    const output = await app(parseWebSocket(event), laconiaContext);
+    return res(output);
+  } catch (err) {
+    console.error(err);
+    return res(err.message, 500);
+  }
+};
+
+module.exports = createWebSocketAdapter;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayBodyInputConverter.js
+```JS
+const { req } = require("@laconia/event").apigateway;
+
+module.exports = class ApiGatewayBodyInputConverter {
+  convert(event) {
+    const apiGatewayEvent = req(event);
+    return {
+      payload: apiGatewayEvent.body,
+      headers: Object.assign(
+        {},
+        apiGatewayEvent.headers,
+        apiGatewayEvent.params
+      )
+    };
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/index.js
+```JS
+const createApiGatewayAdapter = require("./createApiGatewayAdapter");
+const createWebSocketAdapter = require("./createWebSocketAdapter");
+
+exports.apigateway = createApiGatewayAdapter;
+exports.webSocket = createWebSocketAdapter;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/laconiaBatch.js
+```JS
+const laconia = require("@laconia/core");
+const BatchProcessor = require("./BatchProcessor");
+const recurse = require("./recurse");
+const EventEmitter = require("events");
+
+const forwardEvents = (from, eventNames, to, laconiaContext) => {
+  eventNames.forEach(eventName =>
+    from.on(eventName, (...args) => to.emit(eventName, laconiaContext, ...args))
+  );
+};
+
+const isBatchProcessingNotStarted = cursor => !cursor;
+
+module.exports = (
+  reader,
+  { timeNeededToRecurseInMillis = 5000, itemsPerSecond } = {}
+) => {
+  const handler = laconia((event, laconiaContext) => {
+    const { context } = laconiaContext;
+    const itemReader = reader(laconiaContext);
+    const batchProcessor = new BatchProcessor(
+      itemReader.next.bind(itemReader),
+      cursor =>
+        context.getRemainingTimeInMillis() <= timeNeededToRecurseInMillis,
+      { itemsPerSecond }
+    ).on("stop", cursor => {
+      recurse(laconiaContext)({ cursor });
+    });
+    forwardEvents(
+      batchProcessor,
+      ["stop", "item", "end"],
+      handler,
+      laconiaContext
+    );
+
+    if (isBatchProcessingNotStarted(event.cursor)) {
+      handler.emit("start", laconiaContext);
+    }
+    return batchProcessor.start(event.cursor);
+  });
+  return Object.assign(handler, EventEmitter.prototype);
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/BatchProcessor.js
+```JS
+const EventEmitter = require("events");
+const Bottleneck = require("bottleneck");
+
+const rateLimit = (fn, itemPerSecond) => {
+  const limiter = new Bottleneck({
+    maxConcurrent: 1,
+    minTime: 1000 / itemPerSecond
+  });
+  return limiter.wrap(fn);
+};
+
+module.exports = class BatchProcessor extends EventEmitter {
+  constructor(readItem, shouldStop, { itemsPerSecond = 0 } = {}) {
+    super();
+    this.readItem =
+      itemsPerSecond === 0 ? readItem : rateLimit(readItem, itemsPerSecond);
+    this.shouldStop = shouldStop;
+  }
+
+  async start(cursor) {
+    let prevCursor = cursor;
+
+    do {
+      const { item, cursor, finished } = await this.readItem(prevCursor);
+
+      if (item) {
+        this.emit("item", item);
+      }
+
+      if (finished) {
+        this.emit("end");
+        return;
+      }
+
+      if (this.shouldStop(cursor)) {
+        this.emit("stop", cursor);
+        return;
+      }
+
+      prevCursor = cursor;
+    } while (true);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/s3.js
+```JS
+const AWS = require("aws-sdk");
+const S3ItemReader = require("./S3ItemReader");
+
+module.exports = ({ path, s3Params, s3 = new AWS.S3() }) =>
+  new S3ItemReader(s3, s3Params, path);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/recurse.js
+```JS
+const invoker = require("@laconia/invoker");
+const isplainobject = require("lodash.isplainobject");
+const _ = { isPlainObject: isplainobject };
+
+module.exports = ({ event, context, $lambda }) => (payload = {}) => {
+  if (!_.isPlainObject(payload)) {
+    throw new Error("Payload must be an object");
+  }
+  return invoker(context.functionName, $lambda).fireAndForget(
+    Object.assign({}, event, payload)
+  );
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/DynamoDbItemReader.js
+```JS
+const assert = require("assert");
+
+const QUERY = "QUERY";
+const SCAN = "SCAN";
+const unsupportedOperationMessage =
+  "Unsupported DynamoDB operation! Supported operations are SCAN and QUERY.";
+
+module.exports = class DynamoDbItemReader {
+  constructor(operation, documentClient, baseParams) {
+    assert(
+      operation === QUERY || operation === SCAN,
+      unsupportedOperationMessage
+    );
+    this.operation = operation;
+    this.documentClient = documentClient;
+    this.baseParams = baseParams;
+    this.cachedData = {};
+    this.initialized = false;
+  }
+
+  _createDynamoDbParams(exclusiveStartKey) {
+    return Object.assign(
+      { ExclusiveStartKey: exclusiveStartKey },
+      this.baseParams
+    );
+  }
+
+  async _hitAndCacheDynamoDb(params) {
+    const data =
+      this.operation === QUERY
+        ? await this.documentClient.query(params).promise()
+        : await this.documentClient.scan(params).promise();
+    this.cachedData = data;
+    return data;
+  }
+
+  async _getDataFromDynamoDb(cursor) {
+    return this._hitAndCacheDynamoDb(
+      this._createDynamoDbParams(cursor.lastEvaluatedKey)
+    );
+  }
+
+  async _init(cursor) {
+    if (!this.initialized) {
+      await this._hitAndCacheDynamoDb(
+        this._createDynamoDbParams(cursor.exclusiveStartKey)
+      );
+      this.initialized = true;
+    }
+  }
+
+  _getDataFromCache() {
+    return this.cachedData;
+  }
+
+  _hasNextItem(items, currentIndex) {
+    return currentIndex + 1 <= items.length - 1;
+  }
+
+  _hasNextItemInCache(cursor) {
+    return this._hasNextItem(this.cachedData.Items, cursor.index);
+  }
+
+  async next(
+    cursor = {
+      lastEvaluatedKey: undefined,
+      exclusiveStartKey: undefined,
+      index: -1
+    }
+  ) {
+    await this._init(cursor);
+
+    const [data, index, exclusiveStartKey] = this._hasNextItemInCache(cursor)
+      ? [this._getDataFromCache(), cursor.index + 1, cursor.exclusiveStartKey]
+      : [await this._getDataFromDynamoDb(cursor), 0, cursor.lastEvaluatedKey];
+    const { LastEvaluatedKey: lastEvaluatedKey, Items: items } = data;
+
+    return {
+      item: items[index],
+      cursor: {
+        exclusiveStartKey: exclusiveStartKey,
+        lastEvaluatedKey: lastEvaluatedKey,
+        index
+      },
+      finished:
+        lastEvaluatedKey === undefined && !this._hasNextItem(items, index)
+    };
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/S3ItemReader.js
+```JS
+const get = require("lodash.get");
+const _ = { get };
+
+const extractS3JsonBody = data => {
+  const fileContent = data.Body.toString();
+  try {
+    return JSON.parse(fileContent);
+  } catch (e) {
+    throw new Error(
+      `Data stored in S3 is not a JSON!: ${JSON.stringify(fileContent)}`
+    );
+  }
+};
+
+const getArrayFromPath = (object, path) => {
+  const items = path === "." ? object : _.get(object, path);
+
+  if (!Array.isArray(items)) {
+    throw new Error(
+      `Path '${path}' is not an array, it is '${JSON.stringify(items)}'`
+    );
+  }
+  return items;
+};
+
+module.exports = class S3ItemReader {
+  constructor(s3, baseParams, path) {
+    this.s3 = s3;
+    this.baseParams = baseParams;
+    this.path = path;
+    this.cachedItems = [];
+  }
+
+  async _getItemsFromS3() {
+    const data = await this.s3.getObject(this.baseParams).promise();
+    const items = getArrayFromPath(extractS3JsonBody(data), this.path);
+    this.cachedItems = items;
+    return items;
+  }
+
+  _hasNextItem(items, currentIndex) {
+    return currentIndex >= 0 && currentIndex + 1 <= items.length - 1;
+  }
+
+  _hasNextItemInCache(cursor) {
+    return this._hasNextItem(this.cachedItems, cursor.index);
+  }
+
+  async next(cursor = { index: -1 }) {
+    const items = this._hasNextItemInCache(cursor)
+      ? this.cachedItems
+      : await this._getItemsFromS3();
+    const index = cursor.index + 1;
+
+    return {
+      item: items[index],
+      cursor: { index },
+      finished: index + 1 > items.length - 1
+    };
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/dynamoDb.js
+```JS
+const AWS = require("aws-sdk");
+const DynamoDbItemReader = require("./DynamoDbItemReader");
+
+module.exports = ({
+  operation,
+  dynamoDbParams,
+  documentClient = new AWS.DynamoDB.DocumentClient()
+}) => new DynamoDbItemReader(operation, documentClient, dynamoDbParams);
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/index.js
+```JS
+const laconiaBatch = require("./laconiaBatch");
+const s3 = require("./s3");
+const dynamoDb = require("./dynamoDb");
+
+module.exports = exports = laconiaBatch;
+exports.default = laconiaBatch;
+
+exports.s3 = s3;
+exports.dynamoDb = dynamoDb;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/SsmConfigConverter.js
+```JS
+const validateSsmData = data => {
+  if (data.InvalidParameters.length > 0) {
+    throw new Error(`Invalid parameters: ${data.InvalidParameters.join(", ")}`);
+  }
+};
+
+module.exports = class SsmConfigConverter {
+  constructor(ssm) {
+    this.ssm = ssm;
+  }
+
+  async _getParameterMap(parameterNames) {
+    const data = await this.ssm
+      .getParameters({
+        Names: parameterNames,
+        WithDecryption: true
+      })
+      .promise();
+    validateSsmData(data);
+    return data.Parameters.reduce((acc, p) => {
+      acc[p.Name] = p.Value;
+      return acc;
+    }, {});
+  }
+
+  async convertMultiple(values) {
+    const parameterMap = await this._getParameterMap(Object.values(values));
+    return Object.keys(values).reduce((acc, key) => {
+      acc[key] = parameterMap[values[key]];
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/S3ConfigConverter.js
+```JS
+const createS3Params = objectPath => {
+  const splitPath = objectPath.split("/");
+  const Bucket = splitPath.shift();
+  const Key = splitPath.join("/");
+  return {
+    Bucket,
+    Key
+  };
+};
+
+const validateObjectPath = objectPath => {
+  if (!objectPath.endsWith(".json")) {
+    throw new Error(
+      `Object path must have .json extension. ${objectPath} was found`
+    );
+  }
+};
+
+module.exports = class S3ConfigConverter {
+  constructor(s3) {
+    this.s3 = s3;
+  }
+
+  async _getObjectMap(objectPaths) {
+    const objectMap = {};
+    await Promise.all(
+      objectPaths.map(objectPath => {
+        return this.s3
+          .getObject(createS3Params(objectPath))
+          .promise()
+          .then(data => {
+            objectMap[objectPath] = JSON.parse(data.Body);
+          });
+      })
+    );
+
+    return objectMap;
+  }
+
+  async convertMultiple(values) {
+    const objectPaths = Object.values(values);
+    objectPaths.forEach(o => validateObjectPath(o));
+    const objectMap = await this._getObjectMap(objectPaths);
+    return Object.keys(values).reduce((acc, key) => {
+      acc[key] = objectMap[values[key]];
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/SecretsManagerConfigConverter.js
+```JS
+module.exports = class SecretsManagerConfigConverter {
+  constructor(secretsManager) {
+    this.secretsManager = secretsManager;
+  }
+
+  async _getParameterMap(secretIds) {
+    const datas = await Promise.all(
+      secretIds.map(secretId =>
+        this.secretsManager
+          .getSecretValue({
+            SecretId: secretId
+          })
+          .promise()
+      )
+    );
+
+    return datas.map(res => {
+      // Decrypts secret using the associated KMS CMK.
+      // Depending on whether the secret is a string or binary, one of these fields will be populated.
+      let secret;
+      if ({}.hasOwnProperty.call(res, "SecretString")) {
+        secret = res.SecretString;
+        try {
+          secret = JSON.parse(secret);
+        } catch (_) {}
+      } else {
+        const buff = Buffer.from(res.SecretBinary, "base64");
+        secret = buff.toString("ascii");
+      }
+
+      return secret;
+    });
+  }
+
+  async convertMultiple(values) {
+    const secretsMap = await this._getParameterMap(Object.values(values));
+
+    return Object.keys(values).reduce((acc, key, index) => {
+      acc[key] = secretsMap[index];
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/BooleanConfigConverter.js
+```JS
+const convertToBoolean = value => {
+  const falsyValues = ["false", "null", "undefined", "0", "", "no", "n", "off"];
+  return !falsyValues.includes(value.toLowerCase().trim());
+};
+
+module.exports = class BooleanConfigConverter {
+  convertMultiple(values) {
+    return Object.keys(values).reduce((acc, key) => {
+      acc[key] = convertToBoolean(values[key]);
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/IntegerConfigConverter.js
+```JS
+const integerRegex = /[^0-9-]/g;
+
+const validateAndParseInt = (key, val) => {
+  const parsedVal = parseInt(val, 10);
+  if (isNaN(parsedVal) || val.match(integerRegex)) {
+    throw new Error(
+      `Passed config:integer "${key}" = "${val}" is not a valid integer.`
+    );
+  }
+
+  return parsedVal;
+};
+
+module.exports = class IntegerConfigConverter {
+  convertMultiple(values) {
+    return Object.keys(values).reduce((acc, key) => {
+      acc[key] = validateAndParseInt(key, values[key]);
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/EnvVarConfigFactory.js
+```JS
+const { EnvVarInstanceFactory } = require("@laconia/core");
+
+const removeValueType = (valueType, rawInstance) =>
+  rawInstance.replace(new RegExp(`^${valueType}:`), "");
+
+const getValueType = rawInstance => {
+  return rawInstance.split(":")[0];
+};
+
+const filterAndRemoveType = (type, typedValues) => {
+  return Object.entries(typedValues)
+    .filter(([name, value]) => getValueType(value) === type)
+    .map(([name, value]) => [name, removeValueType(type, value)])
+    .reduce((acc, [name, value]) => {
+      acc[name] = value;
+      return acc;
+    }, {});
+};
+
+module.exports = class EnvVarConfigFactory extends EnvVarInstanceFactory {
+  constructor(env, converters) {
+    super(env, "LACONIA_CONFIG_");
+    this.converters = converters;
+  }
+
+  async makeInstances(options) {
+    const typedValues = await super.makeInstances(options);
+    if (Object.keys(typedValues).length === 0) return {};
+
+    const types = Object.keys(this.converters);
+    const conversionResults = await Promise.all(
+      types.map(type => {
+        const values = filterAndRemoveType(type, typedValues);
+        return (
+          Object.keys(values).length > 0 &&
+          this.converters[type].convertMultiple(values)
+        );
+      })
+    );
+    return Object.assign({}, ...conversionResults);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/index.js
+```JS
+const EnvVarConfigFactory = require("./EnvVarConfigFactory");
+const BooleanConfigConverter = require("./BooleanConfigConverter");
+const IntegerConfigConverter = require("./IntegerConfigConverter");
+const FloatConfigConverter = require("./FloatConfigConverter");
+const SsmConfigConverter = require("./SsmConfigConverter");
+const S3ConfigConverter = require("./S3ConfigConverter");
+const SecretsManagerConfigConverter = require("./SecretsManagerConfigConverter");
+
+exports.envVarInstances = () => ({ env, $ssm, $s3, $secretsManager }) =>
+  new EnvVarConfigFactory(env, {
+    boolean: new BooleanConfigConverter(),
+    integer: new IntegerConfigConverter(),
+    float: new FloatConfigConverter(),
+    ssm: new SsmConfigConverter($ssm),
+    s3: new S3ConfigConverter($s3),
+    secretsManager: new SecretsManagerConfigConverter($secretsManager)
+  }).makeInstances();
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/FloatConfigConverter.js
+```JS
+const floatRegex = /[^0-9.-]/g;
+
+const validateAndParseFloat = (key, val) => {
+  const parsedVal = parseFloat(val);
+  if (isNaN(parsedVal) || val.match(floatRegex)) {
+    throw new Error(
+      `Passed config:float "${key}" = "${val}" is not a valid float.`
+    );
+  }
+
+  return parsedVal;
+};
+
+module.exports = class FloatConfigConverter {
+  convertMultiple(values) {
+    return Object.keys(values).reduce((acc, key) => {
+      acc[key] = validateAndParseFloat(key, values[key]);
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/CoreLaconiaContext.js
+```JS
+const LaconiaContext = require("./LaconiaContext");
+const SingleCache = require("./SingleCache");
+
+const cacheResult = (fn, maxAge) => {
+  const cache = new SingleCache(maxAge);
+
+  return async (...args) => {
+    if (cache.isEmpty() || cache.hasExpired()) {
+      cache.set(await fn(...args));
+    }
+    return cache.get();
+  };
+};
+
+module.exports = class CoreLaconiaContext extends LaconiaContext {
+  constructor(baseContext) {
+    super(baseContext);
+    const coreInstances = {
+      env: process.env
+    };
+    this.registerBuiltInInstances(coreInstances);
+  }
+
+  registerFactory(factory, { enabled = true, maxAge = 300000 } = {}) {
+    super.registerFactory(enabled ? cacheResult(factory, maxAge) : factory);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/laconia.js
+```JS
+const AWS = require("aws-sdk");
+const CoreLaconiaContext = require("./CoreLaconiaContext");
+
+const checkFunction = (functionName, argument) => {
+  if (typeof argument !== "function")
+    throw new TypeError(
+      `${functionName}() expects to be passed a function, you passed: ${JSON.stringify(
+        argument
+      )}`
+    );
+};
+
+const awsInstances = {
+  lambda: new AWS.Lambda(),
+  s3: new AWS.S3(),
+  ssm: new AWS.SSM(),
+  sns: new AWS.SNS(),
+  secretsManager: new AWS.SecretsManager()
+};
+
+module.exports = app => {
+  checkFunction("laconia", app);
+  const laconiaContext = new CoreLaconiaContext();
+  laconiaContext.registerBuiltInInstances(awsInstances);
+
+  const laconia = async (event, context, callback) => {
+    laconiaContext.registerInstances({ event, context });
+    await laconiaContext.refresh();
+    if (!callback || process.env.LACONIA_NO_CALLBACK === "true") {
+      return app(event, laconiaContext);
+    }
+    try {
+      const result = await app(event, laconiaContext);
+      callback(null, result);
+    } catch (err) {
+      callback(err);
+    }
+  };
+
+  const registerSingle = (name, factory, options) => {
+    checkFunction("register", factory);
+    const registrableFactory = async laconiaContext => ({
+      [name]: await factory(laconiaContext)
+    });
+
+    laconiaContext.registerFactory(registrableFactory, options.cache);
+  };
+
+  const registerMultiple = (factory, options = {}) => {
+    if (Array.isArray(factory)) {
+      factory.forEach(f => checkFunction("register", f));
+      laconiaContext.registerFactories(factory, options.cache);
+    } else {
+      checkFunction("register", factory);
+      laconiaContext.registerFactory(factory, options.cache);
+    }
+  };
+
+  return Object.assign(laconia, {
+    register: (factory, optionsOrFactory, options = {}) => {
+      if (typeof optionsOrFactory !== "function") {
+        options = optionsOrFactory || {};
+      }
+
+      if (typeof factory === "string") {
+        registerSingle(factory, optionsOrFactory, options);
+      } else {
+        registerMultiple(factory, optionsOrFactory);
+      }
+
+      return laconia;
+    },
+    postProcessor: postProcessor => {
+      checkFunction("postProcessor", postProcessor);
+      laconiaContext.registerPostProcessor(postProcessor);
+      return laconia;
+    }
+  });
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/EnvVarInstanceFactory.js
+```JS
+const macroCaseToCamelCase = str =>
+  str.toLowerCase().replace(/_([a-z])/g, g => g[1].toUpperCase());
+
+module.exports = class EnvVarInstanceFactory {
+  constructor(env, prefix) {
+    this.env = env;
+    this.prefix = prefix;
+  }
+
+  _toObjKey(envKey) {
+    return macroCaseToCamelCase(envKey.replace(this.prefix, ""));
+  }
+
+  _getEnvVar() {
+    return Object.keys(this.env)
+      .filter(k => k.startsWith(this.prefix))
+      .reduce((envVar, k) => {
+        envVar[k] = this.env[k];
+        return envVar;
+      }, {});
+  }
+
+  _preMakeInstance() {}
+
+  _makeInstance(value, options) {
+    return value;
+  }
+
+  async makeInstances(options) {
+    const envVar = this._getEnvVar();
+
+    if (Object.keys(envVar).length === 0) return {};
+
+    await this._preMakeInstance(envVar);
+    return Object.keys(envVar).reduce((acc, envKey) => {
+      acc[this._toObjKey(envKey)] = this._makeInstance(envVar[envKey], options);
+      return acc;
+    }, {});
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/LaconiaContext.js
+```JS
+const prefixKeys = (prefix, object) => {
+  const keyValues = Object.keys(object).map(key => {
+    const newKey = `${prefix}${key}`;
+    return { [newKey]: object[key] };
+  });
+  return Object.assign({}, ...keyValues);
+};
+
+const parallelFactoryFns = factoryFns => async (...args) => {
+  const responses = await Promise.all(factoryFns.map(f => f(...args)));
+  return responses.reduce(
+    (allInstances, instances) => Object.assign(allInstances, instances),
+    {}
+  );
+};
+
+const JEST_INJECTED_PROPERTY = "asymmetricMatch";
+const CONSOLE_LOG_PROPERTIES = [
+  "inspect",
+  "Symbol(util.inspect.custom)",
+  // For Node10.x
+  "Symbol(nodejs.util.inspect.custom)",
+  "Symbol(Symbol.iterator)",
+  "Symbol(Symbol.toStringTag)"
+];
+const JSON_STRINGIFY_PROPERTY = "toJSON";
+const ignoredProperties = [
+  JEST_INJECTED_PROPERTY,
+  JSON_STRINGIFY_PROPERTY,
+  ...CONSOLE_LOG_PROPERTIES
+];
+
+const checkInstanceName = (laconiaContext, instanceName) => {
+  if (!ignoredProperties.includes(instanceName.toString())) {
+    throw new Error(
+      `The dependency ${instanceName} is not available. Have you registered your dependency? These are the dependencies available in LaconiaContext: ${Object.getOwnPropertyNames(
+        laconiaContext
+      ).join(", ")}`
+    );
+  }
+};
+
+const validInstanceNameHandler = {
+  get: (laconiaContext, instanceName) => {
+    if (instanceName in laconiaContext) {
+      return laconiaContext[instanceName];
+    } else {
+      checkInstanceName(laconiaContext, instanceName);
+    }
+  }
+};
+
+const factoryFns = Symbol("factoryFns");
+const postProcessorFns = Symbol("postProcessorFns");
+
+module.exports = class LaconiaContext {
+  constructor() {
+    this[factoryFns] = [];
+    this[postProcessorFns] = [];
+    return new Proxy(this, validInstanceNameHandler);
+  }
+
+  registerInstances(instances) {
+    Object.keys(instances).forEach(key => {
+      this[key] = instances[key];
+    });
+  }
+
+  registerBuiltInInstances(instances) {
+    this.registerInstances(instances);
+    this.registerInstances(prefixKeys("$", instances));
+  }
+
+  registerFactory(factory, options = {}) {
+    this[factoryFns].push(factory);
+  }
+
+  registerFactories(factories, options = {}) {
+    this.registerFactory(parallelFactoryFns(factories), options);
+  }
+
+  registerPostProcessor(postProcessor) {
+    this[postProcessorFns].push(postProcessor);
+  }
+
+  async refresh() {
+    for (const factoryFn of this[factoryFns]) {
+      const instances = await factoryFn(this);
+      this.registerInstances(instances);
+
+      for (const postProcessorFn of this[postProcessorFns]) {
+        await postProcessorFn(instances);
+      }
+    }
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/SingleCache.js
+```JS
+module.exports = class SingleCache {
+  constructor(maxAge) {
+    this.maxAge = maxAge;
+  }
+
+  hasExpired() {
+    return Date.now() - this.lastModified > this.maxAge;
+  }
+
+  set(value) {
+    this.lastModified = Date.now();
+    this.value = value;
+  }
+
+  get() {
+    return this.value;
+  }
+
+  isEmpty() {
+    return this.value === undefined;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/index.js
+```JS
+const laconia = require("./laconia");
+const LaconiaContext = require("./LaconiaContext");
+const EnvVarInstanceFactory = require("./EnvVarInstanceFactory");
+
+module.exports = exports = laconia;
+exports.default = laconia;
+
+exports.LaconiaContext = LaconiaContext;
+exports.EnvVarInstanceFactory = EnvVarInstanceFactory;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/DynamoDbStreamRecord.js
+```JS
+const AWS = require("aws-sdk");
+
+module.exports = class DynamoDbStreamRecord {
+  constructor(data) {
+    this.data = data;
+  }
+
+  get jsonNewImage() {
+    return AWS.DynamoDB.Converter.unmarshall(this.newImage);
+  }
+
+  get newImage() {
+    return this.data.NewImage;
+  }
+
+  static fromRaw(record) {
+    return new DynamoDbStreamRecord(record.dynamodb);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/tryParseJson.js
+```JS
+module.exports = object => {
+  try {
+    return JSON.parse(object);
+  } catch (ignored) {
+    return object;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SqsEvent.js
+```JS
+const SqsRecord = require("./SqsRecord");
+
+module.exports = class SqsEvent {
+  constructor(records) {
+    this.records = records;
+  }
+
+  static fromRaw(event) {
+    return new SqsEvent(event.Records.map(r => SqsRecord.fromRaw(r)));
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/DynamoDbStreamEvent.js
+```JS
+const DynamoDbStreamRecord = require("./DynamoDbStreamRecord");
+
+module.exports = class DynamoDbStreamEvent {
+  constructor(records) {
+    this.records = records;
+  }
+
+  static fromRaw(event) {
+    return new DynamoDbStreamEvent(
+      event.Records.map(r => DynamoDbStreamRecord.fromRaw(r))
+    );
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/KinesisEvent.js
+```JS
+const KinesisRecord = require("./KinesisRecord");
+
+module.exports = class KinesisEvent {
+  constructor(records) {
+    this.records = records;
+  }
+
+  static fromRaw(event) {
+    return new KinesisEvent(event.Records.map(r => KinesisRecord.fromRaw(r)));
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SqsRecord.js
+```JS
+const tryParseJson = require("./tryParseJson");
+
+module.exports = class SqsRecord {
+  constructor(body) {
+    this.body = body;
+  }
+
+  static fromRaw(record) {
+    const sqsRecord = new SqsRecord(tryParseJson(record.body));
+    sqsRecord.receiptHandle = record.receiptHandle;
+    return sqsRecord;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/KinesisRecord.js
+```JS
+module.exports = class KinesisRecord {
+  constructor(data) {
+    this.data = data;
+  }
+
+  get textData() {
+    return this.data.toString("utf8");
+  }
+
+  get jsonData() {
+    return JSON.parse(this.textData);
+  }
+
+  static fromRaw(record) {
+    return new KinesisRecord(Buffer.from(record.kinesis.data, "base64"));
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/S3Event.js
+```JS
+const AWS = require("aws-sdk");
+
+const toParams = Symbol("toParams");
+
+module.exports = class S3Event {
+  constructor(bucket, key, s3) {
+    this.bucket = bucket;
+    this.key = key;
+    this.s3 = s3;
+  }
+
+  [toParams]() {
+    return { Bucket: this.bucket, Key: this.key };
+  }
+
+  getStream() {
+    const stream = this.s3.getObject(this[toParams]()).createReadStream();
+    stream.setEncoding("utf8");
+    return stream;
+  }
+
+  async getObject() {
+    const object = await this.s3.getObject(this[toParams]()).promise();
+    return object.Body;
+  }
+
+  async getJson() {
+    const object = await this.getObject(this.s3);
+    return JSON.parse(object.toString());
+  }
+
+  static fromRaw(event, s3 = new AWS.S3()) {
+    const record = event.Records[0];
+    const { key } = record.s3.object;
+    const { name } = record.s3.bucket;
+    return new S3Event(name, decodeURIComponent(key.replace(/\+/g, " ")), s3);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/index.js
+```JS
+const S3Event = require("./S3Event");
+const SqsEvent = require("./SqsEvent");
+const KinesisEvent = require("./KinesisEvent");
+const SnsEvent = require("./SnsEvent");
+const DynamoDbStreamEvent = require("./DynamoDbStreamEvent");
+const ApiGatewayEvent = require("./apigateway/ApiGatewayEvent");
+const ApiGatewayResponse = require("./apigateway/ApiGatewayResponse");
+const ApiGatewayWebSocketEvent = require("./apigateway/ApiGatewayWebSocketEvent");
+
+exports.s3 = S3Event.fromRaw;
+exports.sqs = SqsEvent.fromRaw;
+exports.kinesis = KinesisEvent.fromRaw;
+exports.dynamodb = DynamoDbStreamEvent.fromRaw;
+exports.sns = SnsEvent.fromRaw;
+exports.apigateway = {
+  req: ApiGatewayEvent.fromRaw,
+  res: ApiGatewayResponse.create,
+  parseWebSocket: ApiGatewayWebSocketEvent.fromRaw
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SnsEvent.js
+```JS
+const tryParseJson = require("./tryParseJson");
+
+module.exports = class SnsEvent {
+  constructor(subject, message) {
+    this.subject = subject;
+    this.message = message;
+  }
+
+  static fromRaw(event) {
+    const record = event.Records[0].Sns;
+    return new SnsEvent(record.Subject, tryParseJson(record.Message));
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/parseRequestBody.js
+```JS
+const querystring = require("querystring");
+const getBody = require("./getBody");
+
+const parseJsonBody = body => {
+  try {
+    return JSON.parse(body);
+  } catch (e) {
+    throw Error(
+      "The request body is not JSON even though the Content-Type is set to application/json"
+    );
+  }
+};
+
+module.exports = (event, headers) => {
+  const contentType = headers["Content-Type"] || "";
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    return querystring.parse(getBody(event));
+  } else if (contentType.includes("application/json")) {
+    return parseJsonBody(getBody(event));
+  } else {
+    return event.body;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayInputHeaders.js
+```JS
+module.exports = class ApiGatewayInputHeaders {
+  constructor(eventHeaders) {
+    eventHeaders = eventHeaders || {};
+    Object.entries(eventHeaders).forEach(([headerName, headerValue]) => {
+      this[headerName.toLowerCase()] = headerValue;
+    });
+
+    const handler = {
+      get: (target, prop) => {
+        const isSymbol = typeof prop === "symbol";
+        const isExisting = prop in target;
+        const propertyKey = isSymbol || isExisting ? prop : prop.toLowerCase();
+        return target[propertyKey];
+      }
+    };
+
+    return new Proxy(this, handler);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/parseWebSocket.js
+```JS
+const getBody = require("./getBody");
+const tryParseJson = require("../tryParseJson");
+
+module.exports = event => {
+  const body = event.body && getBody(event);
+  return tryParseJson(body);
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayResponse.js
+```JS
+const getResponseProps = require("./getResponseProps");
+
+module.exports = class ApiGatewayResponse {
+  static create(output, statusCode = 200, headers = {}) {
+    const { getBody, isBase64Encoded, contentType } = getResponseProps(output);
+    return Object.assign(new ApiGatewayResponse(), {
+      statusCode,
+      body: getBody(),
+      isBase64Encoded: Boolean(isBase64Encoded),
+      headers: Object.assign({ "Content-Type": contentType }, headers)
+    });
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getBody.js
+```JS
+module.exports = event =>
+  Buffer.from(event.body, event.isBase64Encoded ? "base64" : "utf8").toString();
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayEvent.js
+```JS
+const parseRequestBody = require("./parseRequestBody");
+const ApiGatewayInputHeaders = require("./ApiGatewayInputHeaders");
+
+module.exports = class ApiGatewayEvent {
+  static fromRaw(event) {
+    const apiGatewayEvent = new ApiGatewayEvent();
+    apiGatewayEvent.headers = new ApiGatewayInputHeaders(event.headers);
+    apiGatewayEvent.body =
+      event.body === null
+        ? null
+        : parseRequestBody(event, apiGatewayEvent.headers);
+    apiGatewayEvent.params = Object.assign(
+      {},
+      event.pathParameters,
+      event.queryStringParameters
+    );
+    return apiGatewayEvent;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getContentType.js
+```JS
+const getResponseProps = require("./getResponseProps");
+
+module.exports = body => {
+  const { contentType } = getResponseProps(body);
+  return contentType;
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayWebSocketEvent.js
+```JS
+const parseWebSocket = require("./parseWebSocket");
+
+module.exports = class ApiGatewayWebSocketEvent {
+  constructor(body) {
+    this.body = body;
+  }
+
+  static fromRaw(event) {
+    const apiGatewayWebSocketEvent = new ApiGatewayWebSocketEvent(
+      parseWebSocket(event)
+    );
+    apiGatewayWebSocketEvent.context = event.requestContext;
+    return apiGatewayWebSocketEvent;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getResponseProps.js
+```JS
+const types = [
+  [
+    Buffer,
+    body => ({
+      isBase64Encoded: true,
+      contentType: "application/octet-stream",
+      getBody: () => body.toString("base64")
+    })
+  ],
+  [
+    Number,
+    body => ({
+      contentType: "text/plain",
+      getBody: () => JSON.stringify(body)
+    })
+  ],
+  [
+    String,
+    body => ({
+      contentType: "text/plain",
+      getBody: () => body
+    })
+  ],
+  [
+    Object,
+    body => ({
+      contentType: "application/json; charset=utf-8",
+      getBody: () => JSON.stringify(body)
+    })
+  ]
+];
+
+module.exports = body => {
+  const bodyAsObject = Object(body);
+  const [, adapter] = types.find(([type]) => bodyAsObject instanceof type);
+  return adapter(body);
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/invoker.js
+```JS
+const LambdaInvoker = require("./LambdaInvoker");
+
+module.exports = (functionName, lambda, { requestLogs = false } = {}) => {
+  return new LambdaInvoker(functionName, lambda, requestLogs);
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/UnhandledInvokeLaconiaError.js
+```JS
+const UnhandledInvokeLaconiaError = class UnhandledInvokeLaconiaError extends Error {
+  constructor(functionName, lambdaErrorPayload) {
+    super(`Error in ${functionName}: ${lambdaErrorPayload.errorMessage}`);
+    this.name = "Unhandled";
+    this.functionName = functionName;
+  }
+};
+
+module.exports = UnhandledInvokeLaconiaError;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/index.js
+```JS
+const invoker = require("./invoker");
+const HandledInvokeLaconiaError = require("./HandledInvokeLaconiaError");
+const UnhandledInvokeLaconiaError = require("./UnhandledInvokeLaconiaError");
+const EnvVarInvokerFactory = require("./EnvVarInvokerFactory");
+
+module.exports = exports = invoker;
+exports.default = invoker;
+
+exports.HandledInvokeLaconiaError = HandledInvokeLaconiaError;
+exports.UnhandledInvokeLaconiaError = UnhandledInvokeLaconiaError;
+exports.envVarInstances = () => ({ env, $lambda }) =>
+  new EnvVarInvokerFactory(env, $lambda).makeInstances();
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/HandledInvokeLaconiaError.js
+```JS
+const overrideStack = (err, overrideFn) => {
+  Object.defineProperty(err, "stack", {
+    get: () => overrideFn()
+  });
+};
+
+const getLambdaStack = lambdaStackTrace =>
+  lambdaStackTrace.map(t => `    at ${t}`).join("\n");
+
+const extendStack = (invokeLaconiaError, extension) => {
+  const err = new Error(invokeLaconiaError.message);
+  err.name = invokeLaconiaError.name;
+  Error.captureStackTrace(err, HandledInvokeLaconiaError);
+  return () =>
+    err.stack +
+    `\nCaused by an error in ${invokeLaconiaError.functionName} Lambda:\n` +
+    getLambdaStack(invokeLaconiaError.lambdaStackTrace);
+};
+
+const HandledInvokeLaconiaError = class HandledInvokeLaconiaError extends Error {
+  constructor(functionName, lambdaErrorPayload, logResult) {
+    super(`Error in ${functionName}: ${lambdaErrorPayload.errorMessage}`);
+    this.name = lambdaErrorPayload.errorType;
+    this.functionName = functionName;
+    this.lambdaStackTrace = lambdaErrorPayload.stackTrace;
+    this.logs = logResult
+      ? Buffer.from(logResult, "base64").toString()
+      : undefined;
+
+    overrideStack(this, extendStack(this));
+  }
+};
+
+module.exports = HandledInvokeLaconiaError;
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/LambdaInvoker.js
+```JS
+const HandledInvokeLaconiaError = require("./HandledInvokeLaconiaError");
+const UnhandledInvokeLaconiaError = require("./UnhandledInvokeLaconiaError");
+
+const validateStatusCode = (statusCode, expectedStatusCode) => {
+  if (statusCode !== expectedStatusCode) {
+    throw new Error(
+      `Status code returned was: ${statusCode}, expected status code is: ${expectedStatusCode}`
+    );
+  }
+};
+
+module.exports = class LambdaInvoker {
+  constructor(functionName, lambda, requestLogs) {
+    this.lambda = lambda;
+    this.functionName = functionName;
+    this.requestLogs = requestLogs;
+    this.fireAndForget = this.fireAndForget.bind(this);
+    this.requestResponse = this.requestResponse.bind(this);
+  }
+
+  fireAndForget(payload) {
+    return this._invoke(
+      {
+        InvocationType: "Event"
+      },
+      payload,
+      202
+    );
+  }
+
+  async requestResponse(payload) {
+    const data = await this._invoke(
+      {
+        InvocationType: "RequestResponse",
+        LogType: this.requestLogs ? "Tail" : "None"
+      },
+      payload,
+      200
+    );
+
+    try {
+      return JSON.parse(data.Payload);
+    } catch (e) {
+      return data.Payload;
+    }
+  }
+
+  async _invoke(baseParams, payload, validStatusCode) {
+    const params = Object.assign(
+      {
+        FunctionName: this.functionName
+      },
+      baseParams
+    );
+
+    if (payload !== undefined) {
+      params.Payload = JSON.stringify(payload);
+    }
+
+    const data = await this.lambda.invoke(params).promise();
+    if (data.FunctionError) {
+      const errorPayload = JSON.parse(data.Payload);
+      if (data.FunctionError === "Handled") {
+        throw new HandledInvokeLaconiaError(
+          this.functionName,
+          errorPayload,
+          data.LogResult
+        );
+      } else {
+        throw new UnhandledInvokeLaconiaError(this.functionName, errorPayload);
+      }
+    }
+    validateStatusCode(data.StatusCode, validStatusCode);
+    return data;
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/EnvVarInvokerFactory.js
+```JS
+const { EnvVarInstanceFactory } = require("@laconia/core");
+const invoker = require("./invoker");
+
+module.exports = class EnvVarInvokerFactory extends EnvVarInstanceFactory {
+  constructor(env, lambda) {
+    super(env, "LACONIA_INVOKER_");
+    this.lambda = lambda;
+  }
+
+  _makeInstance(value, options) {
+    return invoker(value, this.lambda, options);
+  }
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-middleware-lambda-warmer/src/index.js
+```JS
+const warmer = require("lambda-warmer");
+
+module.exports = () => {
+  return next => {
+    return async (event, context, callback) => {
+      if (await warmer(event)) return "warmed";
+
+      return next(event, context, callback);
+    };
+  };
+};
+
+```
+
+/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-middleware-serverless-plugin-warmup/src/index.js
+```JS
+module.exports = () => {
+  return next => {
+    return async (event, context, callback) => {
+      if (
+        context.custom &&
+        context.custom.source === "serverless-plugin-warmup"
+      )
+        return "Lambda is warm!";
+
+      return next(event, context, callback);
+    };
+  };
+};
+
+```

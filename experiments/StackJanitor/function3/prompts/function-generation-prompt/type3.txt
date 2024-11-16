@@ -1,0 +1,401 @@
+
+You are a computer scientist specializing in serverless computing (especially FaaS).
+You are working with a FaaS codebase whose description is as follows:
+
+## Codebase Summary for StackJanitor
+
+This codebase is written in **TypeScript** and implements a serverless application for managing the lifecycle of AWS CloudFormation stacks. It leverages AWS Lambda functions triggered by various events, such as DynamoDB streams, API Gateway requests (for handling Git webhooks), and CloudFormation stack events.  The codebase uses Jest for testing.
+
+**1. High-Level Overview:**
+
+The application aims to automate the deletion of CloudFormation stacks based on certain criteria, such as a pre-defined expiration time or the state of associated Git pull requests.  It interacts with AWS services like CloudFormation and DynamoDB. Key modules include:
+
+* **handlers:** Contains the core logic for handling different events and orchestrating stack deletion.
+* **helpers:** Provides utility functions for interacting with AWS services and data manipulation.
+* **logger:**  Sets up and exports a pino logger instance for consistent logging across the application.
+* **optional-handlers:** Includes additional functionalities like proactively searching and deleting expired stacks.
+* **data:** Contains data models used by the application, especially for DynamoDB interactions.
+* **tag:** Defines constants for tag names and statuses used for managing stack lifecycle.
+
+**2. Breakdown of Important Functions:**
+
+* **`/handlers/deleteCloudFormationStack.ts`**:
+    * **`index(event: DynamoDBStreamEvent)`**: This is the main entry point for the Lambda function triggered by DynamoDB streams.  It parses DynamoDB stream events, specifically `REMOVE` events, and initiates the deletion of the corresponding CloudFormation stack. It depends upon the `parseEventRecords` function defined in the file `/handlers/dynamoParser.ts`. The parsing function must return a non-empty array of ParsedRecord<DataItem>.
+    * **`deleteCloudFormationStack(item: DataItem)`**:  Deletes a CloudFormation stack based on the provided `DataItem`, which contains stack information.  It checks if the `stackjanitor` tag is enabled before initiating the deletion using the `deleteStack` function in the `/cloudformation.ts` module. The expected format of the input to this function contains a property `tags` which is an array of `CustomTag` type.
+    * **`processRecords(records: ParsedRecord<DataItem>[])`**: Iterates through the parsed DynamoDB records and invokes `deleteCloudFormationStack` for each record.  It handles errors and implements retry logic using a `deleteCount` property in the DynamoDB record. The retry limit is set by `config.MAX_CLEANUP_RETRY` from `/src/config.ts`.
+    * **`isStackJanitorEnabled(tags: CustomTag[])`**: Returns true if tags contain a "stackjanitor" tag with value "enabled".
+
+* **`/handlers/gitHook.ts`**:
+    * **`index(event: APIGatewayEvent)`**: This function is the entry point triggered by API Gateway requests, typically from Git webhooks.  It checks for either Bitbucket or GitHub events and processes them accordingly. Supports invoking an external lambda if `process.env.EXTERNAL_LAMBDA` environment variable is configured. It depends upon `isBitbucketEvent`, `isGithubEvent`, `bitBucketEventHandler`, and `gitHubEventHandler` for processing the events. The data flow would occur as APIGatewayEvent ->  bitbucket/github webhook parser -> `findAndDeleteStacksFromTag`  -> `deleteStacks` -> `deleteDynamoRow`.
+    * **`bitBucketEventHandler(eventData: BitbucketWebhookEvent)`**: Handles Bitbucket webhook events. It processes events only when the pull request state is `MERGED` or `DECLINED`.  It parses the event data to extract repository and branch information.
+    * **`gitHubEventHandler(eventData: GithubWebhookEvent)`**: Handles GitHub webhook events. It processes events only if the `merged` property in the pull request payload is true. It parses the event to extract repository and branch information.
+    * **`findAndDeleteStacksFromTag(gitTag: GitTag)`**: Queries DynamoDB for stacks matching the given Git tag (repository and branch) and initiates their deletion. The query can be modified by changing the value of `SEARCH_KEY` which is set to "tags".
+    * **`deleteStacks(stacks: DataItem[])`**: Iterates over the returned stacks and calls `deleteDynamoRow` for each, removing it from the DynamoDB table.
+    * **`isInDesiredState(state: State)`**: Returns true only for the `MERGED` and `DECLINED` PR states (from the `State` type).
+    * **`bitbucketEventParser(eventData: BitbucketWebhookEvent)`**: Takes the webhook data from Bitbucket and parses it for use in other functions.
+    * **`gitHubEventParser(eventData: GithubWebhookEvent)`**: Takes the webhook data from GitHub and parses it for use in other functions.
+    * **`isBitbucketEvent(event: any)`**: Typeguard function that returns true if the given event is from Bitbucket.
+    * **`isGithubEvent(event: any)`**: Typeguard function that returns true if the given event is from Github.
+
+
+
+* **`/handlers/logCloudFormationStack.ts`**:
+    * **`index(event: CloudFormationEvent)`**: This function is triggered by CloudFormation stack events. It retrieves stack information, including tags, and logs the status of the `stackjanitor` tag.  It also handles updates to the stackjanitor tag and the deletion of a stack from DynamoDB if `stackjanitor` is not enabled after a stack update. The data flow would be: CloudFormationEvent -> `getStackJanitorStatus` -> `handleDataItem`/`generateDeleteItem`.
+    * **`getStackJanitorStatus(tags: CustomTag[])`**: Determines if `stackjanitor` is enabled for the given set of tags and returns either `StackStatus.Enabled` or `StackStatus.Disabled`. It depends upon `findTag`.
+    * **`findTag(tags: CustomTag[])`**: returns the value associated with the tag named `TagName`.
+    * **`convertTags(tags: Tag[])`**: Takes a Tag array and maps the keys and values in each object to the "key" and "value" property names in a new CustomTag array.
+    * **`getTagsFromStacks(stacks: Stack[])`**: Extracts all tags from an array of CloudFormation stacks.
+
+* **`/optional-handlers/searchDeleteCloudformationStack.ts`**:
+    * **`handler()`**: This function proactively searches for and deletes expired CloudFormation stacks.  It retrieves all stacks, filters for those with `stackjanitor` enabled and past their expiration date, and deletes them. The data flow would be `describeAllStacks` -> `returnStackStatus` -> `returnStackTags` -> `isStackExpired` -> `getStackName` -> `deleteStack`.
+
+
+
+* **`/handlers/dynamoParser.ts`**: Provides functions to parse DynamoDB Stream events.
+    * **`parseEventRecords<T>(event: DynamoDBStreamEvent)`**: Parses a DynamoDB stream event and returns an array of `ParsedRecord` objects, each containing the new and old data, event name, and ID.  It handles cases where records are not modified and logs errors accordingly. It depends upon the other function defined in the same file `unmarshallStream`.
+    * **`unmarshallStream<T>(record: DynamoDBRecord)`**: Takes a DynamoDBRecord and returns the unmarshalled `newData` and `oldData` from it as a javascript object.
+    * **`unmarshallItem(data: Image)`**: Takes the `data` of type `Image` and uses `unmarshall` from `../helpers` to convert from the AWS `AttributeValue` format to a javascript object.
+    * **`isThereChange(streamRecord: StreamRecord)`**: Returns true if the oldImage and the newImage are not the same in a streamRecord.
+
+* **`/optional-handlers/utils/describeAllStacks.ts`**:
+    * **`describeAllStacks(nextToken?: string)`**: Retrieves all CloudFormation stacks, handling pagination using `NextToken`.
+
+* **`/optional-handlers/utils/isStackExpired.ts`**:
+    * **`isStackExpired(stack: Stack[])`**: Determines if a stack is expired based on its creation/update time and a configurable expiration period defined in `/src/config.ts`.
+
+
+* **`/optional-handlers/utils/helpers.ts`**: Provides helper functions for filtering and extracting data from CloudFormation stacks.
+
+    * **`returnStackStatus(stacks: Stack[])`**: Filters an array of stacks, returning only those with specific statuses defined in the function.
+    * **`returnStackTags(stacks: Stack[])`**: Filters the stacks and returns those where `stackjanitor` tag is enabled.
+    * **`getStackName(stack: Stack[])`**: Extracts stack names from an array of stacks.
+
+
+**3. External Dependencies:**
+
+* **aws-sdk**:  Used for interacting with AWS services (CloudFormation, DynamoDB, Lambda). Used heavily in the codebase in almost every module.
+* **pino**: Logging library for structured logging. Used in logger.ts.
+* **lodash**: Used for deep comparison of objects (`isEqual`).
+* **stackjanitor**: Internal type declarations for events, and data models are taken from here.
+
+**4. Codebase Structure:**
+
+The codebase follows a modular structure, with functions organized into handlers based on the event source they respond to. Helper functions are grouped into a separate module.  Unit tests are co-located with the functions they test, using the `.test.ts` naming convention. `/src/config.ts` stores the configuration related to the app. The `/src/tag/TagStatus.ts` file is used for storing the possible values of `TagName` and `StackStatus` which include `stackjanitor` and `enabled/disabled`. `/src/data/DynamoDataModel.ts` defines the interface of `DataItem` and other interfaces for dynamodb records.
+
+**5. Module Interactions:**
+
+* DynamoDB streams trigger the `deleteCloudFormationStack` handler, which interacts with the `cloudformation` module to delete stacks.
+* API Gateway requests trigger the `gitHook` handler, which utilizes helper functions to delete corresponding DynamoDB entries.
+* CloudFormation events trigger the `logCloudFormationStack` handler, which updates DynamoDB entries based on stack status and tags.
+
+**General Practices/Styles:**
+
+* **Jest** is used as the testing framework throughout the project.  Each handler file has a corresponding test file.
+* **Async/await** is used extensively for handling asynchronous operations.
+* Error handling is implemented to catch and log errors, with specific handling for certain error types.
+* The project uses TypeScript interfaces and types for data structures.
+* Configuration values, such as the expiration period, are stored in environment variables or a configuration file (`config.ts`).
+
+
+This summary should provide enough information for a developer to understand the codebase and implement new functions.  Refer to the individual files for more detailed implementation specifics.  Make sure to follow existing coding styles and testing practices when adding new code. Remember to always consult type information when in doubt.
+
+
+Your task is to add a new function to this codebase. I will provide you with a description of a function to be added and you will generate the corresponding function. Note that a single serverless function can consist of many files. If the description directs you to create multiple files, you will do so, and will output the path to where the file is to be saved followed by the entire code for the file. 
+Here are some examples. 
+
+----START OF EXAMPLES----
+Description: ## Serverless Function Description: Search and Delete Expired CloudFormation Stacks
+
+This serverless function, `searchDeleteCloudformationStack.ts`,  identifies and deletes expired AWS CloudFormation stacks based on specific criteria.
+
+**1. Purpose and Role:**
+
+This function acts as a cleanup mechanism for CloudFormation stacks. Its primary role is to prevent the accumulation of unused stacks, which can lead to unnecessary costs and management overhead.  It achieves this by systematically searching for stacks that meet certain criteria (status, tags, and expiration time) and then initiating their deletion.
+
+**2. Implementation Details:**
+
+The function operates by first retrieving all CloudFormation stacks within the AWS account. It then filters these stacks based on their status, presence of specific tags indicating that they are managed by this cleanup process (StackJanitor enabled), and whether they have exceeded their defined expiration time. Finally, it triggers the deletion process for any stacks that meet all these criteria.
+
+* **Parameters:** The function does not take any direct input parameters.
+* **Return Values:** The function does not explicitly return any value. Its primary output is the side effect of deleting expired stacks.
+* **Algorithms/Steps:**
+    * Retrieves all CloudFormation stacks.
+    * Filters stacks based on status (using `returnStackStatus`).
+    * Filters the resulting stacks based on the presence of specific tags (using `returnStackTags`).
+    * Filters the resulting stacks based on expiration time (using `isStackExpired`).
+    * Extracts the names of the expired stacks (using `getStackName`).
+    * Iterates through the list of expired stack names and initiates deletion for each (using `deleteStack`).
+
+**3. Relationships:**
+
+* **Dependencies:**
+    * `describeAllStacks` (from `./utils/describeAllStacks`): Used to retrieve all CloudFormation stacks.
+    * `returnStackStatus` (from `./utils/helpers`): Used to filter stacks based on their status.
+    * `returnStackTags` (from `./utils/helpers`): Used to filter stacks based on specific tags.
+    * `isStackExpired` (from `./utils/isStackExpired`): Used to filter stacks based on expiration time.
+    * `getStackName` (from `./utils/helpers`): Used to extract the names of the stacks to be deleted.
+    * `deleteStack` (from `../cloudformation`): Used to initiate the deletion of a CloudFormation stack.
+
+* **Influences:** This function directly influences the state of CloudFormation stacks within the AWS account by deleting those identified as expired.
+
+**4. Structure:**
+
+The function follows a linear sequence of operations:
+
+1. **Retrieval:** Retrieve all stacks.
+2. **Filtering:** Apply a series of filters (status, tags, expiration) to narrow down the list of stacks.
+3. **Extraction:** Extract the names of the filtered stacks.
+4. **Deletion:** Iterate through the extracted names and delete each corresponding stack.
+
+
+This structure allows for clear separation of concerns and makes it easy to understand the flow of logic. The filtering process ensures that only the intended stacks are deleted, while the extraction step prepares the data for the final deletion step.  The asynchronous nature of the `deleteStack` calls within the `forEach` loop allows for parallel deletion of multiple stacks, potentially improving performance.
+
+Function_code: 
+```
+import { deleteStack } from "../cloudformation";
+import { describeAllStacks } from "./utils/describeAllStacks";
+import {
+  getStackName,
+  returnStackStatus,
+  returnStackTags,
+} from "./utils/helpers";
+import { isStackExpired } from "./utils/isStackExpired";
+
+export const handler = async () => {
+  const allStacks = await describeAllStacks();
+  if (allStacks.length > 0) {
+    const desiredStacks = returnStackStatus(allStacks);
+    const stackjanitorEnabledStacks = returnStackTags(desiredStacks);
+    const expiredStacks = isStackExpired(stackjanitorEnabledStacks);
+    const stackNames = getStackName(expiredStacks);
+    stackNames.forEach(async (stackname: string) => {
+      await deleteStack(stackname);
+    });
+  }
+};
+
+```
+
+Description: The function `index` is a serverless function (AWS Lambda handler) written in TypeScript that determines the StackJanitor status (enabled or disabled) for a CloudFormation stack based on CloudFormation events.  This status is crucial for determining whether StackJanitor should manage the lifecycle of the resources within the stack.
+
+**1. Implementation Details:**
+
+* **Parameters:** The function takes a single parameter, `event`, of type `CloudFormationEvent`. This event object contains details about a CloudFormation stack operation (create, update, delete, etc.) triggered within AWS.  Crucially, it includes information like `eventName`, `requestParameters` (containing `stackName` and sometimes `tags`), and potentially `errorCode`.
+* **Return Value:**  The function returns a Promise that resolves to an object containing the original `event` and a `results` object. The `results` object has a `stackjanitor` property, which holds the determined `StackStatus` (either "Enabled" or "Disabled").
+* **Logic:**  The function's core logic revolves around determining the `stackjanitor` tag's value associated with the CloudFormation stack.  It handles different CloudFormation event types (`Create`, `Update`, etc.) differently.
+    * For `Create` events, it looks for the `stackjanitor` tag directly within the `event.detail.requestParameters.tags`.
+    * For other event types (like `Update`, `Delete`), it fetches the tags associated with the stack using the AWS CloudFormation API (specifically `DescribeStacksCommand`).
+* **Error Handling:** The function includes error handling for API calls (specifically catching exceptions during the `DescribeStacks` operation). It logs errors and returns a default `stackjanitor` status of "Disabled" if tag retrieval fails.
+* **DynamoDB Interaction (Conditional):**  If the event is an `Update` event and the determined `stackjanitor` status is "Disabled", the function interacts with a DynamoDB table (via helper functions `generateDeleteItem` and `handleDataItem`) to delete the corresponding record for the stack. This indicates that StackJanitor should no longer manage the stack's resources.
+
+
+**2. Relationships:**
+
+* **AWS SDK:** The function directly depends on the AWS SDK for JavaScript (`@aws-sdk/client-cloudformation`) for interacting with the CloudFormation service.
+* **Helper Functions:** The function utilizes several helper functions:
+    * `getTagsFromStacks`: Extracts tags from an array of `Stack` objects returned by the CloudFormation API.
+    * `findTag`: Searches for a specific tag (by key) within an array of tags.
+    * `getStackJanitorStatus`: Determines the `StackStatus` based on the presence and value of the `stackjanitor` tag.
+    * `convertTags`: Converts tags from the AWS SDK format to a custom `CustomTag` format.
+    * `generateDeleteItem`: Creates a DynamoDB item for deletion (used in the `Update` event handling).
+    * `handleDataItem`: Interacts with the DynamoDB table to perform actions (like delete).
+* **Data Types:** The function utilizes custom types like `CloudFormationEvent`, `CustomTag`, `JanitorRecord`, and enums like `StackStatus`, `TagName`, and `Actions`.  These are defined elsewhere in the codebase.
+* **Logger:**  It uses a `logger` object for logging information and errors.
+
+
+**3. Structure:**
+
+The function follows a branched structure based on the `eventName`:
+
+* **Create Event:** Directly extracts tags and determines status.
+* **Other Events:** Fetches tags using the AWS SDK, handles potential API errors, and then determines status. Within this branch, there's a further conditional block for `Update` events where a DynamoDB delete operation might be triggered if the `stackjanitor` status is "Disabled".
+
+
+**4. Purpose and Role:**
+
+The function serves as the entry point for StackJanitor's response to CloudFormation events.  Its primary purpose is to determine whether StackJanitor should manage a given CloudFormation stack's resources. It does so by checking the `stackjanitor` tag's status.  This information is then used downstream by other parts of the StackJanitor system to orchestrate resource lifecycle management.  The function plays a critical role in the initial setup and ongoing management of stacks by StackJanitor.
+
+
+
+This description provides the essential information for another developer to understand and recreate the functionality of the `index` function. While it outlines the core logic and interactions, it leaves room for implementation-specific optimizations and improvements in the rewritten code.
+
+Function_code: 
+```
+import {
+  CloudFormationClient,
+  DescribeStacksCommand,
+  DescribeStacksCommandInput,
+  Stack,
+  Tag,
+} from "@aws-sdk/client-cloudformation";
+
+import { CloudFormationEvent, CustomTag } from "stackjanitor";
+import { logger } from "../logger";
+import {
+  generateDeleteItem,
+  handleDataItem,
+  RequestType,
+} from "./monitorCloudFormationStack";
+import { StackStatus, TagName } from "../tag/TagStatus";
+import { Actions, JanitorRecord } from "../data/DynamoDataModel";
+
+export const getTagsFromStacks = (stacks: Stack[]): Tag[] =>
+  stacks
+    .filter((stackInfo) => Array.isArray(stackInfo.Tags))
+    .map((stackInfo) => stackInfo.Tags!)
+    .reduce((currentTag, accumulatedTags) =>
+      accumulatedTags.concat(currentTag),
+    );
+
+export const findTag = (tags: CustomTag[]) =>
+  tags.find((t) => t.key === TagName);
+
+export const getStackJanitorStatus = (tags: CustomTag[]): StackStatus => {
+  const tag = findTag(tags);
+  if (tag && tag.value === StackStatus.Enabled) {
+    return StackStatus.Enabled;
+  }
+  return StackStatus.Disabled;
+};
+
+interface TagsWithValues {
+  Key: string;
+  Value: string;
+}
+
+export const convertTags = (tags: Tag[]): CustomTag[] => {
+  const filtered = tags.filter((tag) => {
+    return typeof tag.Key === "string" && typeof tag.Value === "string";
+  }) as TagsWithValues[];
+  return filtered.map((tag) => ({
+    key: tag.Key,
+    value: tag.Value,
+  }));
+};
+
+export const index = async (event: CloudFormationEvent) => {
+  const cloudFormation = new CloudFormationClient();
+  let stackStatus: StackStatus = StackStatus.Disabled;
+  const eventName = event.detail.eventName;
+
+  // only CreateEvent has tags in event->detail->requestParameters
+  if (eventName === RequestType.Create) {
+    const tags = event.detail.requestParameters.tags;
+    stackStatus = getStackJanitorStatus(tags);
+  } else {
+    // For all other types of Stack events tags need to be fetched
+    try {
+      // early exit when we are attempting an UpdateStack call (edge case) before create and we get this error
+      if (
+        event.detail.errorCode &&
+        event.detail.errorCode === "ValidationException"
+      ) {
+        logger.info({
+          event,
+        });
+        return {
+          event,
+          results: {
+            stackjanitor: stackStatus,
+          },
+        };
+      }
+      const describeStacksCommandInput: DescribeStacksCommandInput = {
+        StackName: event.detail.requestParameters.stackName,
+      };
+      const describeStacksCmd = new DescribeStacksCommand(
+        describeStacksCommandInput,
+      );
+      const { Stacks } = await cloudFormation.send(describeStacksCmd);
+
+      if (Stacks) {
+        const tags = getTagsFromStacks(Stacks);
+        const customTags = convertTags(tags);
+        event.detail.requestParameters.tags = customTags;
+        stackStatus = getStackJanitorStatus(customTags);
+      }
+    } catch (e: any) {
+      logger.error(
+        {
+          event,
+          stack: e.stack,
+        },
+        e.message,
+      );
+    }
+
+    // if updated stack has no or disabled stackjanitor tag remove Dynamo row
+    if (
+      eventName === RequestType.Update &&
+      stackStatus !== StackStatus.Enabled
+    ) {
+      const item = await generateDeleteItem(event);
+      await handleDataItem(item, JanitorRecord, Actions.Destroy);
+    }
+  }
+  return {
+    event,
+    results: {
+      stackjanitor: stackStatus,
+    },
+  };
+};
+
+```
+
+----END OF EXAMPLES----
+
+The function you generate should have the following functionality:
+
+Description: The function `monitorCloudFormationStack` acts as the core logic for monitoring and managing the lifecycle of CloudFormation stacks within a serverless application. Its primary purpose is to respond to CloudFormation events (create, update, and delete) and maintain a persistent record of stack information, including expiration times, for automated cleanup.
+
+**1. Implementation Details:**
+
+* **Parameters:**
+    * `event`: A `CloudFormationEvent` object containing details about the CloudFormation stack operation (create, update, or delete). This object contains information like the stack name, event time, request parameters, and response elements.
+    * `dataMapper`: An `Entity` object from the `dynamodb-toolbox` library. This object represents a DynamoDB table and provides methods for interacting with it (put, delete, get, update).
+
+* **Return Value:** A `Promise` that resolves to a `MonitoringResultStatus` (either "success" or "ignore").  "success" indicates that the function successfully processed the event and updated the database. "ignore" signifies that the event was either of an unsupported type or an error occurred during processing.
+
+* **Logic:**
+    * The function uses a `switch` statement to determine the type of CloudFormation event (`CreateStack`, `UpdateStack`, or `DeleteStack`).
+    * Based on the event type, it generates a data item representing the stack and performs a corresponding action on a DynamoDB table using the `dataMapper`.  
+    * For create and update events, it generates a new `DataItem` including the stack name, ID, expiration time (calculated from the event time and a configured default expiration period), and tags. It then stores or updates this item in the DynamoDB table.
+    * For delete events, it generates a `DeleteItem` with the stack name and ID and removes the corresponding item from the DynamoDB table.
+    * Helper functions (`generateItemFromEvent`, `generateDeleteItem`, `getExpirationTime`) are used to encapsulate the logic for generating data items and expiration times.
+    * The `handleDataItem` function abstracts the database interaction logic, handling put, delete, get, and update operations based on the provided action.
+
+**2. Relationships:**
+
+* **Dependencies:**
+    * `config`:  Imports configuration values, specifically `DEFAULT_EXPIRATION_PERIOD` and `DELETE_INTERVAL`.
+    * `logger`:  Used for logging information and errors.
+    * `CloudFormationEvent`, `DataItem`, `DeleteItem`, `StackJanitorStatus` types.
+    * `Actions`, `JanitorRecord` for DynamoDB interaction.
+    * `Entity` from `dynamodb-toolbox` for database operations.
+    * `getStackArn` function to retrieve stack ARN when needed.
+
+* **Influences:** The function directly modifies the state of a DynamoDB table by adding, updating, or removing stack records. It relies on the `JanitorRecord` entity to map to the specific DynamoDB table.
+
+
+**3. Structure:**
+
+The main structure revolves around the `switch` statement based on the `event.detail.eventName`. Each case within the `switch` statement calls helper functions to generate the appropriate data item (`DataItem` or `DeleteItem`) and then uses `handleDataItem` to interact with the DynamoDB table.  Error handling is implemented within `handleDataItem` to catch and log exceptions.
+
+
+**4. Purpose and Role:**
+
+This function is crucial for maintaining the state of CloudFormation stacks and enabling automated cleanup. It provides the following functionality:
+
+* **Tracking Stack Creation/Updates:**  Ensures that newly created or updated stacks are recorded in the DynamoDB table with their expiration times.
+* **Facilitating Stack Deletion:** Enables the deletion of stack information from the database when a stack is deleted.
+* **Automated Cleanup (External):**  Although not directly implemented within this function, the stored expiration times in the DynamoDB table are used by other parts of the system (not shown) to trigger automated deletion of expired stacks.
+
+This function essentially bridges the gap between CloudFormation events and a persistent data store, enabling other parts of the system to perform actions like automated cleanup.
+
+
+Please generate the complete code for this function, ensuring it integrates seamlessly with the existing system.
+The code should follow best practices for serverless development, and it must be in accordance with the current architecture of the system.
+Note that no human will evaluate the code you generate; your code will be deployed directly to the system.
+Ensure that you do not provide anything except the code. Include any relevant information in comments.
+If you lack any information to write the complete code, mention this in a comment and make a reasonable assumption from the context and your knowledge.

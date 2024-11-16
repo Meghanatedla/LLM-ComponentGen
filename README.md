@@ -1,1 +1,1 @@
-# LLM-ComponentGen
+# LLM-Serverless

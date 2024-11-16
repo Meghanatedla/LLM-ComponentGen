@@ -1,0 +1,354 @@
+
+You are a computer scientist specializing in serverless computing (especially FaaS).
+You are working with a FaaS codebase whose description is as follows:
+
+This codebase is written in JavaScript and uses Node.js along with the Laconia framework for building serverless applications. It implements a system for processing orders, interacting with users via WebSockets, and notifying restaurants.  Here's a detailed summary:
+
+**1. High-Level Overview:**
+
+The codebase manages orders within a restaurant system.  Key functionalities include placing orders, capturing payments, notifying users and restaurants about order statuses, and calculating total orders per restaurant. It utilizes various AWS services like Lambda, DynamoDB, S3, Kinesis, SQS, SNS, API Gateway, and WebSockets.  LaconiaJS (@laconia/core) is used as the foundation for structuring serverless functions.
+
+**2. Important Functions and Modules:**
+
+* **`/calculate-total-order.js`**: This function calculates the total order amount for each restaurant. It reads a list of restaurant IDs from an S3 file (`restaurants.json`), retrieves orders for each restaurant from DynamoDB (`ORDER_TABLE_NAME`), calculates the total, and stores the results in S3 (`TOTAL_ORDER_BUCKET_NAME`). Uses `@laconia/batch` for batched processing of restaurants.
+
+* **`/S3TotalOrderStorage.js`**: This module provides an abstraction for storing and retrieving total order data from S3. It offers methods for putting, clearing, getting, and waiting for a specific number of objects of a given type (e.g., "json", "xml").
+
+* **`/update-user-receipt.js`**: This function sends a thank you message to the user via WebSockets upon receiving an "order received" message. It leverages `@laconia/adapter-api` to interact with API Gateway's WebSocket APIs.
+
+* **`/notify-user.js`**:  This function processes order events from a Kinesis stream. It filters for "accepted" events and sends them to an SQS queue (`USER_EMAIL_QUEUE_URL`) for email notification processing.
+
+* **`/download-image.js`**: This function serves a static image (`2_vertical@0.5x.png`) from the `/resources` directory via API Gateway.  `@laconia/adapter-api` is used for API Gateway integration. Custom headers ensure correct content type.
+
+* **`/convert-total-order-to-xml.js`**:  This function reads total order data (presumably JSON) from an S3 event trigger, converts it to XML, and stores the XML in S3 (`TOTAL_ORDER_BUCKET_NAME`).
+
+* **`/KinesisOrderStream.js`**: This module provides a simple interface for sending order events to a Kinesis stream (`ORDER_STREAM_NAME`).
+
+* **`/SnsRestaurantNotificationTopic.js`**: This module abstracts interaction with an SNS topic for sending restaurant notifications (`RESTAURANT_NOTIFICATION_TOPIC_ARN`).
+
+* **`/DynamoDbWebSocketServer.js`**: This module provides functions for managing WebSocket connections. It stores connection IDs in DynamoDB (`CONNECTION_TABLE_NAME`) and enables broadcasting messages to connected clients.
+
+* **`/capture-card-payment.js`**: This function represents a placeholder for capturing card payments. It throws an error if the `paymentReference` is missing from the event. It is likely a stub for future implementation. Uses `@laconia/test` spy functionalities.
+
+* **`/ValidationError.js`**: This class defines a custom error type for validation errors.
+
+* **`/fake-restaurant.js`**: This function simulates a restaurant accepting orders. It checks the `restaurantId` and if it matches `1`, sends a PUT request to an acceptance URL (`/order/{orderId}/accept`).
+
+* **`/update-user.js`**: This function processes order events from Kinesis and broadcasts an "order accepted" message via WebSockets when an "accepted" event is found.
+
+* **`/send-email.js`**: This function acts as a placeholder for sending emails based on SQS messages. It currently logs order events but likely requires further implementation to send actual emails. Uses `@laconia/test` spy functionalities.
+
+* **`/place-order.js`**: This function handles placing orders. It validates API keys, restaurant IDs, and an enabled flag.  Generates a UUID for each order, saves the order to DynamoDB (`ORDER_TABLE_NAME`), and sends a "placed" event to the Kinesis stream (`ORDER_STREAM_NAME`). Uses Laconia middleware for lambda warming, configuration, and x-ray tracing.
+
+* **`/UuidIdGenerator.js`**: This module provides a simple function for generating UUIDs.
+
+* **`/disconnect-websocket.js`**:  This function handles disconnecting a WebSocket client by removing its connection ID from the DynamoDB table (`CONNECTION_TABLE_NAME`).
+
+* **`/sts.js`**: This module uses AWS STS to retrieve the account ID.
+
+* **`/connect-websocket.js`**: This function handles connecting a WebSocket client by adding its connection ID to the DynamoDB table (`CONNECTION_TABLE_NAME`).
+
+* **`/DynamoDbOrderRepository.js`**: This module provides an abstraction for interacting with DynamoDB to store and retrieve order data (`ORDER_TABLE_NAME`).  Offers methods for saving, finding, and querying orders.
+
+* **`/notify-restaurant.js`**: This function consumes order events from Kinesis and publishes "placed" events to an SNS topic (`RESTAURANT_NOTIFICATION_TOPIC_ARN`) for notifying restaurants.
+
+* **`/WebSocketClient.js`**: This module provides an interface for sending messages to WebSocket clients connected via API Gateway.
+
+* **`/accept-order.js`**: This function handles accepting an order by sending an "accepted" event to the Kinesis stream (`ORDER_STREAM_NAME`). Includes CORS headers in the response.
+
+* **`/laconia-adapter`**: Contains modules for converting various AWS service events (S3, DynamoDB, SNS, SQS, and Kinesis) into formats suitable for Laconia functions. Each module typically exports a converter that transforms event data into usable objects (e.g., JSON objects, streams). 
+
+* **`/laconia-adapter-api`**: Contains modules that facilitate integration with API Gateway and WebSockets. These handle input and output conversion, and error handling specifically for the HTTP/WebSocket APIs.
+
+* **`/laconia-batch`**: Contains modules to implement batched processing of items coming from a data source. Functions can register themselves as "listeners" on items coming from this batch processor. Batch processing can be from DynamoDB and S3.
+
+* **`/laconia-config`**: Contains modules to read and parse environment configuration at run-time. The configuration can be of various types, with data coming from SSM, S3 and Secrets Manager.
+
+* **`/laconia-core`**: The core Laconia framework. Provides a context object (`LaconiaContext`) that helps manage dependencies and other runtime resources for LaconiaJS Lambda functions. Offers dependency injection via a factory pattern.
+
+* **`/laconia-event`**: Provides classes to process raw events from AWS services such as S3, SQS, Kinesis, SNS, DynamoDB Streams and API Gateway into easier-to-use representations.
+
+* **`/laconia-invoker`**: This package is used to invoke other Lambda functions, using a `LambdaInvoker` class which handles invocations both synchronously and asynchronously.
+
+* **`/laconia-middleware-lambda-warmer`**: This is a Laconia middleware that integrates `lambda-warmer` to handle Lambda warmup events.
+
+* **`/laconia-middleware-serverless-plugin-warmup`**: This is another Laconia middleware specifically for `serverless-plugin-warmup` which handles warmup events from the plugin.
+
+**3. External Dependencies:**
+
+The codebase relies on several npm packages:
+
+* **`@laconia/core`**: Core Laconia framework.
+* **`@laconia/adapter`**: Adapters for various AWS services.
+* **`@laconia/adapter-api`**: Adapters for API Gateway and WebSockets.
+* **`@laconia/batch`**: Tools for batched processing.
+* **`@laconia/config`**: For configuration management.
+* **`@laconia/invoker`**:  For invoking other Lambda functions.
+* **`@laconia/test`**: Used for testing. Specifically spy functionality is used.
+* **`@laconia/middleware-lambda-warmer`**: Lambda warmer middleware.
+* **`@laconia/xray`**: For AWS X-Ray tracing integration.
+* **`aws-sdk`**:  For interacting with AWS services.
+* **`aws-apigatewaymanagementapi`**: For interacting with API Gateway's WebSocket APIs.
+* **`bottleneck`**: For rate limiting.
+* **`lambda-warmer`**: For handling Lambda warmup events.
+* **`lodash.get`**:  For retrieving data from objects using paths.
+* **`lodash.isplainobject`**: To check if an input is a plain object.
+* **`p-wait-for`**:  For polling until a condition is met.
+* **`pino`**:  For logging.
+* **`uuid/v4`**: For generating UUIDs.
+* **`axios`**: Promise based HTTP client.
+
+
+**4. Codebase Structure:**
+
+The code is organized by function, with each JavaScript file representing a separate Lambda function. Modules for common utilities (e.g., `S3TotalOrderStorage`, `KinesisOrderStream`, `DynamoDbOrderRepository`) are placed in separate files for reusability. Laconia packages implement middleware patterns.
+
+**5. Module Interactions and Data Flow:**
+
+* Order placement starts with `place-order.js`, which validates input, saves the order to DynamoDB (`DynamoDbOrderRepository`), and sends a "placed" event to Kinesis (`KinesisOrderStream`).
+* `notify-restaurant.js` consumes the "placed" event from Kinesis and publishes it to an SNS topic (`SnsRestaurantNotificationTopic`).
+* `fake-restaurant.js` simulates a restaurant's action upon receiving the SNS notification and sends a PUT request to `accept-order.js`.
+* `accept-order.js` sends an "accepted" event to Kinesis.
+* `notify-user.js` and `update-user.js` react to the "accepted" event. `notify-user.js` sends a message to SQS to trigger email sending (`send-email.js`), and `update-user.js` broadcasts a message to connected WebSocket clients (`DynamoDbWebSocketServer`).
+* `calculate-total-order.js` calculates the total orders for restaurants by reading from S3 and DynamoDB and then writes the results to S3 (`S3TotalOrderStorage`).
+* `convert-total-order-to-xml.js` converts the total order JSON in S3 to XML.
+* WebSocket connections are managed via `connect-websocket.js` and `disconnect-websocket.js`, which interact with `DynamoDbWebSocketServer.js` to manage connections in DynamoDB.
+* `update-user-receipt.js` interacts directly with a user via WebSockets upon receiving a specific message.
+
+
+**Laconia Practices/Styles**:
+
+* **Dependency Injection**: Laconia's `register` function is used extensively for dependency injection. The `instances` functions are factories for creating dependencies within the Laconia context.
+* **Adapters**: Laconia adapters are used to convert events from AWS services to Laconia-friendly formats.
+* **Middleware**: Middleware functions, such as lambda warmers and config processors, are used to add functionality around the main application logic.
+
+
+This summary should provide enough details for a developer to add new functions and features to the codebase without needing to refer to the code itself. They will still need to refer to Laconia documentation, AWS service documentation and the dependencies' documentations for in-depth guides on usage. They will also need to investigate how to set up environment variables and the required AWS infrastructure for running the project.
+
+Your task is to add a new function to this codebase. I will provide you with a description of a function to be added and you will generate the corresponding function. Note that a single serverless function can consist of many files. If the description directs you to create multiple files, you will do so, and will output the path to where the file is to be saved followed by the entire code for the file. 
+Here are some examples. 
+
+----START OF EXAMPLES----
+Description: This serverless function, `capture-card-payment`, is designed to initiate the capture of a card payment. It's built using the Laconia framework, a Node.js framework for serverless applications.
+
+**1. Implementation Details:**
+
+* **Parameters:** The function receives a single argument, `event`, which is expected to be a JavaScript object. This object should contain a `paymentReference` property.
+* **Return Value:**  The function does not explicitly return a value.  Its core functionality revolves around triggering the payment capture process based on the provided input. Any success or failure related to the payment capture would likely be managed downstream by services or systems integrated with this function.  Since the handler is wrapped with `spy` functions from `@laconia/test`, these will likely record calls and parameters for testing purposes, but not modify the core logic.
+* **Logic:**  The primary logic involves validating the input.  If the `event` object lacks a `paymentReference` property, the function throws an error. The function is set up for testability using spies from Laconia test library which intercept and record calls to the functions wrapped inside it. This allows for assertions in testing against invocation and parameters. Beyond the validation and test setup, the exact implementation of how the payment capture is performed is not present in this provided code snippet. It is expected to happen downstream as a side effect that happens as a consequence of other parts of the system being notified about this payment attempt.
+
+**2. Relationships:**
+
+* **Dependencies:**  The function depends on the `@laconia/core` and `@laconia/test` packages. `@laconia/core` provides the core Laconia functionality, while `@laconia/test` is used for testing, specifically for spying on function calls.
+* **Interactions:**  The code snippet doesn't reveal direct interactions with other components.  The actual payment capture mechanism isn't implemented within this function. It is assumed that other systems or services integrated with the laconia framework, or invoked downstream from this function will handle the payment capture process.  The `spy` wrappers indicate that this function is designed to be tested within a broader Laconia application context.
+
+**3. Structure:**
+
+The function has a simple structure:
+
+* **Input Validation:** An `if` statement checks for the presence of the `paymentReference` property in the `event` object.
+* **Error Handling:** If the `paymentReference` is missing, an error is thrown.
+
+**4. Purpose and Role:**
+
+This function serves as an entry point or trigger within a larger payment processing system. Its primary role is to receive payment requests, validate the presence of necessary information (`paymentReference`), and then, presumably, initiate the actual payment capture process by interacting with other parts of the system (not shown in this code snippet). The `paymentReference` would be used to identify and process the payment. This function acts as an initial validation layer before triggering downstream systems.
+
+**Rewriting Considerations:**
+
+* The payment capture mechanism is not included within this function. When recreating this function,  decide where this logic should reside: within this function, delegated to another service, or triggered by an event.
+* Error handling could be enhanced to provide more specific error messages or alternative handling strategies beyond throwing an error.
+* Consider logging the `paymentReference` or other relevant information for audit trails and debugging.
+* Think about asynchronous operations: if the payment capture is a long-running process, asynchronous handling or queuing might be necessary.
+* If the only role of this function is validation and spy setup for the handler, evaluate if the code should be simplified. The core business logic of payment capture and processing is absent in this specific snippet.
+Function_code: 
+```
+// @ts-check
+const laconia = require("@laconia/core");
+const { spy } = require("@laconia/test");
+
+exports.app = async event => {
+  if (!event.paymentReference) {
+    throw new Error("paymentReference is required");
+  }
+};
+
+exports.handler = laconia(spy(exports.app)).register(spy.instances());
+
+```
+
+Description: The serverless function `place-order.js` handles incoming requests to place new orders in a food ordering system.
+
+1. **Implementation Details:**
+
+- **Purpose:** The function's primary goal is to process incoming order requests, validate them, persist the order data, and publish an order placed event to a downstream system.
+- **Parameters:**  The function receives the following parameters:
+    - `newOrder`: An object representing the incoming order details from the client request. This likely includes items ordered, customer information, restaurant selection, etc.  The exact format is not enforced but assumed to have an `order` property.
+    - `headers`: An object containing the request headers. This is used to retrieve the `authorization` header for API key validation.
+    - An object containing injected dependencies:
+        - `orderRepository`: An instance of `DynamoDbOrderRepository` for persisting order data.
+        - `orderStream`: An instance of `KinesisOrderStream` for publishing order events.
+        - `idGenerator`: An instance of `UuidIdGenerator` for generating unique order IDs.
+        - `apiKey`: The expected API key for authentication.
+        - `restaurants`: A list of valid restaurant IDs.
+        - `enabled`: A flag indicating whether the order placement functionality is enabled.
+
+
+- **Return Value:** The function returns an object containing the newly generated `orderId`.
+- **Error Handling:** The function utilizes custom `ValidationError` for input validation errors (API Key and Restaurant Id). It throws a generic `Error` if the order placement is disabled. These are handled by the API Gateway integration to return appropriate status codes.
+
+2. **Relationships:**
+
+- **Dependencies:** The function depends on several external modules and classes:
+    - `@laconia/core`: For Laconia framework functionality.
+    - `@laconia/adapter-api`: For API Gateway integration.
+    - `@laconia/config`: For configuration management.
+    - `@laconia/xray`: For AWS X-Ray tracing.
+    - `@laconia/middleware-lambda-warmer`: For Lambda warmer support.
+    - `DynamoDbOrderRepository`: For interacting with DynamoDB to store order data.
+    - `KinesisOrderStream`: For interacting with Kinesis to publish order events.
+    - `UuidIdGenerator`: For generating UUIDs.
+    - `ValidationError`: Custom error class for validation failures.
+    - `pino`: For logging.
+- **Downstream Effects:** The function publishes an "order placed" event to a Kinesis stream. This event likely triggers further processing in other parts of the system, such as order fulfillment or notification services.
+
+3. **Structure:**
+
+- **Validation:**  The function first validates the input, including the API key, the enabled flag, and the restaurant ID.
+- **Order Creation:** It generates a unique order ID. It then constructs the complete order object by combining the generated `orderId` with the received `newOrder.order` data.
+- **Persistence:** The function saves the order data to DynamoDB using the `orderRepository`.
+- **Event Publishing:** It publishes an "order placed" event to a Kinesis stream, including the `orderId` and `restaurantId`.
+- **Response:**  The function returns the `orderId` to the client.
+
+4. **Purpose and Role:**
+
+This function serves as the entry point for placing new orders. It plays a critical role in the order processing workflow by validating requests, persisting order information, and initiating downstream processes. It ensures data integrity and triggers the necessary actions for order fulfillment.
+
+
+This description provides a comprehensive overview of the `place-order.js` function, allowing another developer to understand its functionality and rewrite it with potential optimizations without being overly constrained by implementation details.
+
+Function_code: 
+```
+// @ts-check
+const lambdaWarmer = require("@laconia/middleware-lambda-warmer")();
+const laconia = require("@laconia/core");
+const adapterApi = require("@laconia/adapter-api");
+const config = require("@laconia/config");
+const xray = require("@laconia/xray");
+const DynamoDbOrderRepository = require("./DynamoDbOrderRepository");
+const KinesisOrderStream = require("./KinesisOrderStream");
+const UuidIdGenerator = require("./UuidIdGenerator");
+const ValidationError = require("./ValidationError");
+const log = require("pino")();
+
+const validateApiKey = (headers, apiKey) => {
+  if (headers.authorization !== apiKey) {
+    throw new ValidationError("Unauthorized: Wrong API Key");
+  }
+};
+
+const validateRestaurantId = (restaurants, restaurantId) => {
+  if (!restaurants.includes(restaurantId)) {
+    throw new ValidationError(`Invalid restaurant id: ${restaurantId}`);
+  }
+};
+
+const validateEnabledFlag = enabled => {
+  if (!enabled) {
+    throw new Error("Place order lambda is off");
+  }
+};
+
+const instances = ({ env }) => ({
+  orderRepository: new DynamoDbOrderRepository(env.ORDER_TABLE_NAME),
+  idGenerator: new UuidIdGenerator(),
+  orderStream: new KinesisOrderStream(env.ORDER_STREAM_NAME)
+});
+
+const apigateway = adapterApi.apigateway({
+  inputType: "body",
+  includeInputHeaders: true,
+  errorMappings: {
+    ValidationError: () => ({ statusCode: 400 })
+  }
+});
+
+exports.app = async (
+  newOrder,
+  headers,
+  { orderRepository, orderStream, idGenerator, apiKey, restaurants, enabled }
+) => {
+  validateEnabledFlag(enabled);
+  validateApiKey(headers, apiKey);
+  const orderId = idGenerator.generate();
+  const order = Object.assign(
+    {
+      orderId
+    },
+    newOrder.order
+  );
+
+  validateRestaurantId(restaurants, order.restaurantId);
+  log.info(order, "Saving order");
+  await orderRepository.save(order);
+  await orderStream.send({
+    eventType: "placed",
+    orderId,
+    restaurantId: order.restaurantId
+  });
+
+  return { orderId };
+};
+
+const handler = laconia(apigateway(exports.app))
+  .register([config.envVarInstances(), instances])
+  .postProcessor(xray.postProcessor());
+
+exports.handler = lambdaWarmer(handler);
+
+```
+
+----END OF EXAMPLES----
+
+The function you generate should have the following functionality:
+
+Description: This serverless function processes card payments in batches from a DynamoDB table. It's designed for efficiency and leverages the Laconia framework for batch processing, invocation, and X-Ray tracing.
+
+**1. Implementation Details:**
+
+* **Purpose:**  The function scans a DynamoDB table for orders and triggers card payment capture for each order.
+* **Parameters:** The function implicitly receives batches of items from a DynamoDB table scan. Each item represents an order and is expected to contain a `paymentReference` attribute. The batch size and processing rate are controlled by the Laconia batch configuration.
+* **Return Value:** The function doesn't explicitly return a value. It operates as a side-effect, triggering asynchronous card payment captures. It relies on the `fireAndForget` nature of the `captureCardPayment` invoker for asynchronous processing.
+* **Algorithm/Steps:**
+    1. **DynamoDB Scan:** The function scans the `ORDER_TABLE_NAME` (specified by an environment variable) using the DynamoDB Scan operation.
+    2. **Batch Processing:** Laconia Batch handles the retrieved items in batches, controlling the processing rate (2 items per second in this case).
+    3. **Asynchronous Invocation:** For each item in the batch, the function invokes the `captureCardPayment` function asynchronously using `fireAndForget`.  The `paymentReference` from the DynamoDB item is passed as an argument to the `captureCardPayment` function.
+
+
+**2. Relationships:**
+
+* **Dependencies:** The function depends on several Laconia packages:
+    * `@laconia/invoker`: Used for invoking the `captureCardPayment` function.  The `invoker.envVarInstances()` is used, likely to resolve the `captureCardPayment` function based on environment variables which implies this function is defined elsewhere and injected.
+    * `@laconia/xray`: Used for AWS X-Ray tracing integration, allowing for monitoring and debugging of the function's execution within the AWS environment.
+    * `@laconia/batch`: Used for managing the batch processing of DynamoDB items, providing control over throughput and error handling.
+* **Interaction:** The function interacts with DynamoDB by scanning the `ORDER_TABLE_NAME` table. It also interacts with the `captureCardPayment` function by invoking it for each processed item.
+
+**3. Structure:**
+
+The function is structured around the Laconia batch processing framework.  
+
+* **DynamoDB Scan:** The `laconiaBatch.dynamoDb` function configures the DynamoDB scan operation.
+* **Batch Configuration:** The `{ itemsPerSecond: 2 }` option configures the batch processing rate.
+* **Invoker Registration:** The `register(invoker.envVarInstances())` registers the invokers to be used within the batch processing pipeline.
+* **X-Ray Post-Processor:** The `postProcessor(xray.postProcessor())` adds X-Ray tracing to the function.
+* **Item Processing:** The `on("item", ...)` function defines the logic for processing each item in the batch. This includes invoking the `captureCardPayment` function with the relevant payment reference.
+
+**4. Purpose and Role:**
+
+This function plays a crucial role in the payment processing flow of the application. Its purpose is to retrieve pending orders from the database and trigger the asynchronous capture of payments.  By leveraging batch processing and asynchronous invocation, it ensures efficient and scalable processing of a potentially large number of orders. The use of the `fireAndForget` pattern further decouples the payment capture process, improving system resilience and responsiveness.
+
+
+Please generate the complete code for this function, ensuring it integrates seamlessly with the existing system.
+The code should follow best practices for serverless development, and it must be in accordance with the current architecture of the system.
+Note that no human will evaluate the code you generate; your code will be deployed directly to the system.
+Ensure that you do not provide anything except the code. Include any relevant information in comments.
+If you lack any information to write the complete code, mention this in a comment and make a reasonable assumption from the context and your knowledge.

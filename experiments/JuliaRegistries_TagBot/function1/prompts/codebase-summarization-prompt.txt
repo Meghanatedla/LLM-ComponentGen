@@ -1,0 +1,2859 @@
+You are a computer scientist specializing in serverless computing (especially FaaS) and your task is to summarize the entire codebase provided below so that other developers may use it when adding more functions to this codebase. Please ensure that it is a detailed summary and includes the following details:
+
+1. A high-level overview of the main functionalities offered by the codebase, highlighting key modules or components.
+2. A breakdown of important functions and what specific tasks or executions they handle.
+3. Identify any external dependencies, libraries, or frameworks the code relies on, and describe how they are integrated into the codebase.
+4. Describe the overall structure of the codebase (e.g., how files are organized, major classes or modules).
+5. Explain any relationships or interactions between different modules or components, such as how data flows between them. 
+
+Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/__init__.py
+```python
+import os
+import sys
+import traceback
+
+from io import StringIO
+from logging import (
+    DEBUG,
+    INFO,
+    WARNING,
+    ERROR,
+    Formatter,
+    LogRecord,
+    StreamHandler,
+    getLogger,
+)
+
+
+class LogFormatter(Formatter):
+    """A log formatter that changes its output based on where it's being run."""
+
+    def __init__(self, env: str) -> None:
+        super().__init__("%(asctime)s | %(levelname)s | %(msg)s", datefmt="%H:%M:%S")
+        self._env = env
+
+    def _fmt_actions(self, record: LogRecord) -> str:
+        message = record.getMessage()
+        if record.exc_info:
+            buf = StringIO()
+            cls, inst, tb = record.exc_info
+            traceback.print_exception(cls, inst, tb, file=buf)
+            buf.seek(0)
+            message += "\n" + buf.read()
+        if record.levelno == INFO:
+            return message
+        if record.levelno == DEBUG:
+            level = "debug"
+        elif record.levelno == WARNING:
+            level = "warning"
+        elif record.levelno == ERROR:
+            level = "error"
+        trans = str.maketrans({"%": "%25", "\n": "%0A", "\r": "%0D"})
+        return f"::{level} ::{message.translate(trans)}"
+
+    def _fmt_fallback(self, record: LogRecord) -> str:
+        return Formatter.format(self, record)
+
+    def format(self, record: LogRecord) -> str:
+        if self._env == "actions":
+            return self._fmt_actions(record)
+        else:
+            return self._fmt_fallback(record)
+
+
+logger = getLogger("tagbot")
+_ENV = "local"
+if os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+    _ENV = "lambda"
+elif os.getenv("GITHUB_ACTIONS") == "true":
+    _ENV = "actions"
+log_handler = StreamHandler()
+logger.addHandler(log_handler)
+log_handler.setFormatter(LogFormatter(_ENV))
+if _ENV != "local":
+    log_handler.setStream(sys.stdout)
+    logger.setLevel(DEBUG)
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/__init__.py
+```python
+TAGBOT_WEB = "https://julia-tagbot.com"
+
+
+class Abort(Exception):
+    pass
+
+
+class InvalidProject(Abort):
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/__main__.py
+```python
+import json
+import os
+import sys
+import time
+
+from typing import Dict, Optional
+
+from datetime import timedelta
+
+from .. import logger
+from .changelog import Changelog
+from .repo import Repo
+
+INPUTS: Optional[Dict[str, str]] = None
+CRON_WARNING = """\
+Your TagBot workflow should be updated to use issue comment triggers instead of cron.
+See this Discourse thread for more information: https://discourse.julialang.org/t/ann-required-updates-to-tagbot-yml/49249
+"""  # noqa: E501
+
+
+def get_input(key: str, default: str = "") -> str:
+    """Get an input from the environment, or from a workflow input if it's set."""
+    global INPUTS
+    default = os.getenv(f"INPUT_{key.upper().replace('-', '_')}", default)
+    if INPUTS is None:
+        if "GITHUB_EVENT_PATH" not in os.environ:
+            return default
+        with open(os.environ["GITHUB_EVENT_PATH"]) as f:
+            event = json.load(f)
+        INPUTS = event.get("inputs") or {}
+    return INPUTS.get(key.lower()) or default
+
+
+try:
+    if os.getenv("GITHUB_EVENT_NAME") == "schedule":
+        logger.warning(CRON_WARNING)
+    token = get_input("token")
+    if not token:
+        logger.error("No GitHub API token supplied")
+        sys.exit(1)
+    ssh = get_input("ssh")
+    gpg = get_input("gpg")
+    changelog_ignore = get_input("changelog_ignore")
+    if changelog_ignore:
+        ignore = changelog_ignore.split(",")
+    else:
+        ignore = Changelog.DEFAULT_IGNORE
+
+    repo = Repo(
+        repo=os.getenv("GITHUB_REPOSITORY", ""),
+        registry=get_input("registry"),
+        github=get_input("github"),
+        github_api=get_input("github_api"),
+        token=token,
+        changelog=get_input("changelog"),
+        changelog_ignore=ignore,
+        ssh=bool(ssh),
+        gpg=bool(gpg),
+        draft=get_input("draft").lower() in ["true", "yes"],
+        registry_ssh=get_input("registry_ssh"),
+        user=get_input("user"),
+        email=get_input("email"),
+        lookback=int(get_input("lookback")),
+        branch=get_input("branch"),
+        subdir=get_input("subdir"),
+        tag_prefix=get_input("tag_prefix"),
+    )
+
+    if not repo.is_registered():
+        logger.info("This package is not registered, skipping")
+        logger.info(
+            "If this repository is not going to be registered, then remove TagBot"
+        )
+        sys.exit()
+
+    versions = repo.new_versions()
+    if not versions:
+        logger.info("No new versions to release")
+        sys.exit()
+
+    if get_input("dispatch", "false") == "true":
+        minutes = int(get_input("dispatch_delay"))
+        repo.create_dispatch_event(versions)
+        logger.info(f"Waiting {minutes} minutes for any dispatch handlers")
+        time.sleep(timedelta(minutes=minutes).total_seconds())
+
+    if ssh:
+        repo.configure_ssh(ssh, get_input("ssh_password"))
+    if gpg:
+        repo.configure_gpg(gpg, get_input("gpg_password"))
+
+    for version, sha in versions.items():
+        logger.info(f"Processing version {version} ({sha})")
+        if get_input("branches", "false") == "true":
+            repo.handle_release_branch(version)
+        repo.create_release(version, sha)
+except Exception as e:
+    try:
+        repo.handle_error(e)
+    except NameError:
+        logger.exception("An unexpected, unreportable error occurred")
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/repo.py
+```python
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import traceback
+
+import docker
+import pexpect
+import requests
+import toml
+
+from base64 import b64decode
+from datetime import datetime, timedelta, timezone
+from stat import S_IREAD, S_IWRITE, S_IEXEC
+from subprocess import DEVNULL
+from tempfile import mkdtemp, mkstemp
+from typing import Dict, List, Mapping, MutableMapping, Optional, TypeVar, Union, cast
+from urllib.parse import urlparse
+
+from github import Github, Auth, GithubException, UnknownObjectException
+from github.PullRequest import PullRequest
+from gnupg import GPG
+from semver import VersionInfo
+
+from .. import logger
+from . import TAGBOT_WEB, Abort, InvalidProject
+from .changelog import Changelog
+from .git import Git
+
+RequestException = requests.RequestException
+T = TypeVar("T")
+
+
+class Repo:
+    """A Repo has access to its Git repository and registry metadata."""
+
+    def __init__(
+        self,
+        *,
+        repo: str,
+        registry: str,
+        github: str,
+        github_api: str,
+        token: str,
+        changelog: str,
+        changelog_ignore: List[str],
+        ssh: bool,
+        gpg: bool,
+        draft: bool,
+        registry_ssh: str,
+        user: str,
+        email: str,
+        lookback: int,
+        branch: Optional[str],
+        subdir: Optional[str] = None,
+        tag_prefix: Optional[str] = None,
+        github_kwargs: Optional[Dict[str, object]] = None,
+    ) -> None:
+        if github_kwargs is None:
+            github_kwargs = {}
+        if not urlparse(github).scheme:
+            github = f"https://{github}"
+        if not urlparse(github_api).scheme:
+            github_api = f"https://{github_api}"
+        self._gh_url = github
+        self._gh_api = github_api
+        auth = Auth.Token(token)
+        self._gh = Github(
+            auth=auth,
+            base_url=self._gh_api,
+            per_page=100,
+            **github_kwargs,  # type: ignore
+        )
+        self._repo = self._gh.get_repo(repo, lazy=True)
+        self._registry_name = registry
+        try:
+            self._registry = self._gh.get_repo(registry)
+        except UnknownObjectException:
+            # This gets raised if the registry is private and the token lacks
+            # permissions to read it. In this case, we need to use SSH.
+            if not registry_ssh:
+                raise Abort(f"Registry {registry} is not accessible")
+            self._registry_ssh_key = registry_ssh
+            logger.debug("Will access registry via Git clone")
+            self._clone_registry = True
+        except Exception:
+            # This is an awful hack to let me avoid properly fixing the tests...
+            if "pytest" in sys.modules:
+                logger.warning("'awful hack' in use")
+                self._registry = self._gh.get_repo(registry, lazy=True)
+                self._clone_registry = False
+            else:
+                raise
+        else:
+            self._clone_registry = False
+        self._token = token
+        self._changelog = Changelog(self, changelog, changelog_ignore)
+        self._ssh = ssh
+        self._gpg = gpg
+        self._draft = draft
+        self._user = user
+        self._email = email
+        self._git = Git(self._gh_url, repo, token, user, email)
+        self._lookback = timedelta(days=lookback, hours=1)
+        self.__registry_clone_dir: Optional[str] = None
+        self.__release_branch = branch
+        self.__subdir = subdir
+        self.__tag_prefix = tag_prefix
+        self.__project: Optional[MutableMapping[str, object]] = None
+        self.__registry_path: Optional[str] = None
+        self.__registry_url: Optional[str] = None
+
+    def _project(self, k: str) -> str:
+        """Get a value from the Project.toml."""
+        if self.__project is not None:
+            return str(self.__project[k])
+        for name in ["Project.toml", "JuliaProject.toml"]:
+            try:
+                filepath = os.path.join(self.__subdir, name) if self.__subdir else name
+                contents = self._only(self._repo.get_contents(filepath))
+                break
+            except UnknownObjectException:
+                pass
+        else:
+            raise InvalidProject("Project file was not found")
+        self.__project = toml.loads(contents.decoded_content.decode())
+        return str(self.__project[k])
+
+    @property
+    def _registry_clone_dir(self) -> str:
+        if self.__registry_clone_dir is not None:
+            return self.__registry_clone_dir
+        repo = mkdtemp(prefix="tagbot_registry_")
+        self._git.command("init", repo, repo=None)
+        self.configure_ssh(self._registry_ssh_key, None, repo=repo)
+        url = f"git@{urlparse(self._gh_url).hostname}:{self._registry_name}.git"
+        self._git.command("remote", "add", "origin", url, repo=repo)
+        self._git.command("fetch", "origin", repo=repo)
+        self._git.command("checkout", self._git.default_branch(repo=repo), repo=repo)
+        self.__registry_clone_dir = repo
+        return repo
+
+    @property
+    def _registry_path(self) -> Optional[str]:
+        """Get the package's path in the registry repo."""
+        if self.__registry_path is not None:
+            return self.__registry_path
+        try:
+            uuid = self._project("uuid")
+        except KeyError:
+            raise InvalidProject("Project file has no UUID")
+        if self._clone_registry:
+            with open(os.path.join(self._registry_clone_dir, "Registry.toml")) as f:
+                registry = toml.load(f)
+        else:
+            contents = self._only(self._registry.get_contents("Registry.toml"))
+            blob = self._registry.get_git_blob(contents.sha)
+            b64 = b64decode(blob.content)
+            string_contents = b64.decode("utf8")
+            registry = toml.loads(string_contents)
+
+        if uuid in registry["packages"]:
+            self.__registry_path = registry["packages"][uuid]["path"]
+            return self.__registry_path
+        return None
+
+    @property
+    def _registry_url(self) -> Optional[str]:
+        """Get the package's url in the registry repo."""
+        if self.__registry_url is not None:
+            return self.__registry_url
+        root = self._registry_path
+        try:
+            contents = self._only(self._registry.get_contents(f"{root}/Package.toml"))
+        except UnknownObjectException:
+            raise InvalidProject("Package.toml was not found")
+        package = toml.loads(contents.decoded_content.decode())
+        self.__registry_url = package["repo"]
+        return self.__registry_url
+
+    @property
+    def _release_branch(self) -> str:
+        """Get the name of the release branch."""
+        return self.__release_branch or self._repo.default_branch
+
+    def _only(self, val: Union[T, List[T]]) -> T:
+        """Get the first element of a list or the thing itself if it's not a list."""
+        return val[0] if isinstance(val, list) else val
+
+    def _maybe_decode_private_key(self, key: str) -> str:
+        """Return a decoded value if it is Base64-encoded, or the original value."""
+        return key if "PRIVATE KEY" in key else b64decode(key).decode()
+
+    def _create_release_branch_pr(self, version_tag: str, branch: str) -> None:
+        """Create a pull request for the release branch."""
+        self._repo.create_pull(
+            title=f"Merge release branch for {version_tag}",
+            body="",
+            head=branch,
+            base=self._repo.default_branch,
+        )
+
+    def _tag_prefix(self) -> str:
+        """Return the package's tag prefix."""
+        if self.__tag_prefix == "NO_PREFIX":
+            return "v"
+        elif self.__tag_prefix:
+            return self.__tag_prefix + "-v"
+        elif self.__subdir:
+            return self._project("name") + "-v"
+        else:
+            return "v"
+
+    def _get_version_tag(self, package_version: str) -> str:
+        """Return the prefixed version tag."""
+        if package_version.startswith("v"):
+            package_version = package_version[1:]
+        return self._tag_prefix() + package_version
+
+    def _registry_pr(self, version: str) -> Optional[PullRequest]:
+        """Look up a merged registry pull request for this version."""
+        if self._clone_registry:
+            # I think this is actually possible, but it looks pretty complicated.
+            return None
+        name = self._project("name")
+        uuid = self._project("uuid")
+        url = self._registry_url
+        if not url:
+            logger.info("Could not find url of package in registry")
+            return None
+        url_hash = hashlib.sha256(url.encode()).hexdigest()
+        # This is the format used by Registrator/PkgDev.
+        # see https://github.com/JuliaRegistries/RegistryTools.jl/blob/
+        # 0de7540015c6b2c0ff31229fc6bb29663c52e5c4/src/utils.jl#L23-L23
+        head = f"registrator-{name.lower()}-{uuid[:8]}-{version}-{url_hash[:10]}"
+        logger.debug(f"Looking for PR from branch {head}")
+        now = datetime.now(timezone.utc)
+        # Check for an owner's PR first, since this is way faster (only one request).
+        registry = self._registry
+        owner = registry.owner.login
+        logger.debug(f"Trying to find PR by registry owner first ({owner})")
+        prs = registry.get_pulls(head=f"{owner}:{head}", state="closed")
+        for pr in prs:
+            if pr.merged_at is not None and now - pr.merged_at < self._lookback:
+                return pr
+        logger.debug("Did not find registry PR by registry owner")
+        prs = registry.get_pulls(state="closed")
+        for pr in prs:
+            if now - cast(datetime, pr.closed_at) > self._lookback:
+                break
+            if pr.merged and pr.head.ref == head:
+                return pr
+        return None
+
+    def _commit_sha_from_registry_pr(self, version: str, tree: str) -> Optional[str]:
+        """Look up the commit SHA of version from its registry PR."""
+        pr = self._registry_pr(version)
+        if not pr:
+            logger.info("Did not find registry PR")
+            return None
+        m = re.search("- Commit: ([a-f0-9]{32})", pr.body)
+        if not m:
+            logger.info("Registry PR body did not match")
+            return None
+        commit = self._repo.get_commit(m[1])
+        # Handle special case of tagging packages in a repo subdirectory, in which
+        # case the Julia package tree hash does not match the git commit tree hash
+        if self.__subdir:
+            arg = f"{commit.sha}:{self.__subdir}"
+            subdir_tree_hash = self._git.command("rev-parse", arg)
+            if subdir_tree_hash == tree:
+                return commit.sha
+            else:
+                msg = "Subdir tree SHA of commit from registry PR does not match"
+                logger.warning(msg)
+                return None
+        # Handle regular case (subdir is not set)
+        if commit.commit.tree.sha == tree:
+            return commit.sha
+        else:
+            logger.warning("Tree SHA of commit from registry PR does not match")
+            return None
+
+    def _commit_sha_of_tree_from_branch(
+        self, branch: str, tree: str, since: datetime
+    ) -> Optional[str]:
+        """Look up the commit SHA of a tree with the given SHA on one branch."""
+        for commit in self._repo.get_commits(sha=branch, since=since):
+            if commit.commit.tree.sha == tree:
+                return commit.sha
+        return None
+
+    def _commit_sha_of_tree(self, tree: str) -> Optional[str]:
+        """Look up the commit SHA of a tree with the given SHA."""
+        since = datetime.now() - self._lookback
+        sha = self._commit_sha_of_tree_from_branch(self._release_branch, tree, since)
+        if sha:
+            return sha
+        for branch in self._repo.get_branches():
+            if branch.name == self._release_branch:
+                continue
+            sha = self._commit_sha_of_tree_from_branch(branch.name, tree, since)
+            if sha:
+                return sha
+        # For a valid tree SHA, the only time that we reach here is when a release
+        # has been made long after the commit was made, which is reasonably rare.
+        # Fall back to cloning the repo in that case.
+        return self._git.commit_sha_of_tree(tree)
+
+    def _commit_sha_of_tag(self, version_tag: str) -> Optional[str]:
+        """Look up the commit SHA of a given tag."""
+        try:
+            ref = self._repo.get_git_ref(f"tags/{version_tag}")
+        except UnknownObjectException:
+            return None
+        ref_type = getattr(ref.object, "type", None)
+        if ref_type == "commit":
+            return ref.object.sha
+        elif ref_type == "tag":
+            tag = self._repo.get_git_tag(ref.object.sha)
+            return tag.object.sha
+        else:
+            return None
+
+    def _commit_sha_of_release_branch(self) -> str:
+        """Get the latest commit SHA of the release branch."""
+        branch = self._repo.get_branch(self._release_branch)
+        return branch.commit.sha
+
+    def _filter_map_versions(self, versions: Dict[str, str]) -> Dict[str, str]:
+        """Filter out versions and convert tree SHA to commit SHA."""
+        valid = {}
+        for version, tree in versions.items():
+            version = f"v{version}"
+            expected = self._commit_sha_from_registry_pr(version, tree)
+            if not expected:
+                expected = self._commit_sha_of_tree(tree)
+            if not expected:
+                logger.warning(
+                    f"No matching commit was found for version {version} ({tree})"
+                )
+                continue
+            version_tag = self._get_version_tag(version)
+            sha = self._commit_sha_of_tag(version_tag)
+            if sha:
+                if sha != expected:
+                    msg = f"Existing tag {version_tag} points at the wrong commit (expected {expected})"  # noqa: E501
+                    logger.error(msg)
+                else:
+                    logger.info(f"Tag {version_tag} already exists")
+                continue
+            valid[version] = expected
+        return valid
+
+    def _versions(self, min_age: Optional[timedelta] = None) -> Dict[str, str]:
+        """Get all package versions from the registry."""
+        if self._clone_registry:
+            return self._versions_clone(min_age=min_age)
+        root = self._registry_path
+        if not root:
+            logger.debug("Package is not registered")
+            return {}
+        kwargs = {}
+        if min_age:
+            # Get the most recent commit from before min_age.
+            until = datetime.now() - min_age
+            commits = self._registry.get_commits(until=until)
+            # Get the first value like this because the iterator has no `next` method.
+            for commit in commits:
+                kwargs["ref"] = commit.commit.sha
+                break
+            else:
+                logger.debug("No registry commits were found")
+                return {}
+        try:
+            contents = self._only(
+                self._registry.get_contents(f"{root}/Versions.toml", **kwargs)
+            )
+        except UnknownObjectException:
+            logger.debug(f"Versions.toml was not found ({kwargs})")
+            return {}
+        versions = toml.loads(contents.decoded_content.decode())
+        return {v: versions[v]["git-tree-sha1"] for v in versions}
+
+    def _versions_clone(self, min_age: Optional[timedelta] = None) -> Dict[str, str]:
+        """Same as _versions, but uses a Git clone to access the registry."""
+        registry = self._registry_clone_dir
+        if min_age:
+            # TODO: Time zone stuff?
+            default_sha = self._git.command("rev-parse", "HEAD", repo=registry)
+            earliest = datetime.now() - min_age
+            shas = self._git.command("log", "--format=%H", repo=registry).split("\n")
+            for sha in shas:
+                dt = self._git.time_of_commit(sha, repo=registry)
+                if dt < earliest:
+                    self._git.command("checkout", sha, repo=registry)
+                    break
+            else:
+                logger.debug("No registry commits were found")
+                return {}
+        try:
+            root = self._registry_path
+            if not root:
+                logger.debug("Package is not registered")
+                return {}
+            path = os.path.join(registry, root, "Versions.toml")
+            if not os.path.isfile(path):
+                logger.debug("Versions.toml was not found")
+                return {}
+            with open(path) as f:
+                versions = toml.load(f)
+            return {v: versions[v]["git-tree-sha1"] for v in versions}
+        finally:
+            if min_age:
+                self._git.command("checkout", default_sha, repo=registry)
+
+    def _pr_exists(self, branch: str) -> bool:
+        """Check whether a PR exists for a given branch."""
+        owner = self._repo.owner.login
+        for pr in self._repo.get_pulls(head=f"{owner}:{branch}"):
+            return True
+        return False
+
+    def _run_url(self) -> str:
+        """Get the URL of this Actions run."""
+        url = f"{self._repo.html_url}/actions"
+        run = os.getenv("GITHUB_RUN_ID")
+        if run:
+            url += f"/runs/{run}"
+        return url
+
+    def _image_id(self) -> str:
+        """Get the Docker image ID."""
+        host = os.getenv("HOSTNAME", "")
+        if not host:
+            logger.warning("HOSTNAME is not set")
+            return "Unknown"
+        client = docker.from_env()
+        container = client.containers.get(host)
+        return container.image.id
+
+    def _report_error(self, trace: str) -> None:
+        """Report an error."""
+        if self._repo.private or os.getenv("GITHUB_ACTIONS") != "true":
+            logger.debug("Not reporting")
+            return
+        logger.debug("Reporting error")
+        data = {
+            "image": self._image_id(),
+            "repo": self._repo.full_name,
+            "run": self._run_url(),
+            "stacktrace": trace,
+        }
+        resp = requests.post(f"{TAGBOT_WEB}/report", json=data)
+        output = json.dumps(resp.json(), indent=2)
+        logger.info(f"Response ({resp.status_code}): {output}")
+
+    def is_registered(self) -> bool:
+        """Check whether or not the repository belongs to a registered package."""
+        try:
+            root = self._registry_path
+        except InvalidProject as e:
+            logger.debug(e.message)
+            return False
+        if not root:
+            return False
+        if self._clone_registry:
+            with open(
+                os.path.join(self._registry_clone_dir, root, "Package.toml")
+            ) as f:
+                package = toml.load(f)
+        else:
+            contents = self._only(self._registry.get_contents(f"{root}/Package.toml"))
+            package = toml.loads(contents.decoded_content.decode())
+        gh = cast(str, urlparse(self._gh_url).hostname).replace(".", r"\.")
+        if "@" in package["repo"]:
+            pattern = rf"{gh}:(.*?)(?:\.git)?$"
+        else:
+            pattern = rf"{gh}/(.*?)(?:\.git)?$"
+        m = re.search(pattern, package["repo"])
+        if not m:
+            return False
+        # I'm not really sure why mypy doesn't like this line without the cast.
+        return cast(bool, m[1].casefold() == self._repo.full_name.casefold())
+
+    def new_versions(self) -> Dict[str, str]:
+        """Get all new versions of the package."""
+        current = self._versions()
+        logger.debug(f"There are {len(current)} total versions")
+        old = self._versions(min_age=self._lookback)
+        logger.debug(f"There are {len(current) - len(old)} new versions")
+        # Make sure to insert items in SemVer order.
+        versions = {}
+        for v in sorted(current.keys(), key=VersionInfo.parse):
+            if v not in old:
+                versions[v] = current[v]
+        return self._filter_map_versions(versions)
+
+    def create_dispatch_event(self, payload: Mapping[str, object]) -> None:
+        """Create a repository dispatch event."""
+        # TODO: Remove the comment when PyGithub#1502 is published.
+        self._repo.create_repository_dispatch("TagBot", payload)  # type: ignore
+
+    def configure_ssh(self, key: str, password: Optional[str], repo: str = "") -> None:
+        """Configure the repo to use an SSH key for authentication."""
+        if not repo:
+            self._git.set_remote_url(self._repo.ssh_url)
+        _, priv = mkstemp(prefix="tagbot_key_")
+        with open(priv, "w") as f:
+            # SSH keys must end with a single newline.
+            f.write(self._maybe_decode_private_key(key).strip() + "\n")
+        os.chmod(priv, S_IREAD)
+        # Add the host key to a known hosts file
+        # so that we don't have to confirm anything when we try to push.
+        _, hosts = mkstemp(prefix="tagbot_hosts_")
+        host = cast(str, urlparse(self._gh_url).hostname)
+        with open(hosts, "w") as f:
+            subprocess.run(
+                ["ssh-keyscan", "-t", "rsa", host],
+                check=True,
+                stdout=f,
+                stderr=DEVNULL,
+            )
+        cmd = f"ssh -i {priv} -o UserKnownHostsFile={hosts}"
+        logger.debug(f"SSH command: {cmd}")
+        self._git.config("core.sshCommand", cmd, repo=repo)
+        if password:
+            # Start the SSH agent, apply the environment changes,
+            # then add our identity so that we don't need to supply a password anymore.
+            proc = subprocess.run(
+                ["ssh-agent"], check=True, text=True, capture_output=True
+            )
+            for k, v in re.findall(r"\s*(.+)=(.+?);", proc.stdout):
+                logger.debug(f"Setting environment variable {k}={v}")
+                os.environ[k] = v
+            child = pexpect.spawn(f"ssh-add {priv}")
+            child.expect("Enter passphrase")
+            child.sendline(password)
+            child.expect("Identity added")
+
+    def configure_gpg(self, key: str, password: Optional[str]) -> None:
+        """Configure the repo to sign tags with GPG."""
+        home = os.environ["GNUPGHOME"] = mkdtemp(prefix="tagbot_gpg_")
+        os.chmod(home, S_IREAD | S_IWRITE | S_IEXEC)
+        logger.debug(f"Set GNUPGHOME to {home}")
+        gpg = GPG(gnupghome=home, use_agent=True)
+        import_result = gpg.import_keys(
+            self._maybe_decode_private_key(key), passphrase=password
+        )
+        if import_result.sec_imported != 1:
+            logger.warning(import_result.stderr)
+            raise Abort("Importing key failed")
+        key_id = import_result.fingerprints[0]
+        logger.debug(f"GPG key ID: {key_id}")
+        if password:
+            # Sign some dummy data to put our password into the GPG agent,
+            # so that we don't need to supply the password when we create a tag.
+            sign_result = gpg.sign("test", passphrase=password)
+            if sign_result.status != "signature created":
+                logger.warning(sign_result.stderr)
+                raise Abort("Testing GPG key failed")
+        # On Debian, the Git version is too old to recognize tag.gpgSign,
+        # so the tag command will need to use --sign.
+        self._git._gpgsign = True
+        self._git.config("tag.gpgSign", "true")
+        self._git.config("user.signingKey", key_id)
+
+    def handle_release_branch(self, version: str) -> None:
+        """Merge an existing release branch or create a PR to merge it."""
+        # Exclude "v" from version: `0.0.0` or `SubPackage-0.0.0`
+        branch_version = self._tag_prefix()[:-1] + version[1:]
+        branch = f"release-{branch_version}"
+        if not self._git.fetch_branch(branch):
+            logger.info(f"Release branch {branch} does not exist")
+        elif self._git.is_merged(branch):
+            logger.info(f"Release branch {branch} is already merged")
+        elif self._git.can_fast_forward(branch):
+            logger.info("Release branch can be fast-forwarded")
+            self._git.merge_and_delete_branch(branch)
+        elif self._pr_exists(branch):
+            logger.info("Release branch already has a PR")
+        else:
+            logger.info(
+                "Release branch cannot be fast-forwarded, creating pull request"
+            )
+            version_tag = self._get_version_tag(version)
+            self._create_release_branch_pr(version_tag, branch)
+
+    def create_release(self, version: str, sha: str) -> None:
+        """Create a GitHub release."""
+        target = sha
+        if self._commit_sha_of_release_branch() == sha:
+            # If we use <branch> as the target, GitHub will show
+            # "<n> commits to <branch> since this release" on the release page.
+            target = self._release_branch
+        version_tag = self._get_version_tag(version)
+        logger.debug(f"Release {version_tag} target: {target}")
+        log = self._changelog.get(version_tag, sha)
+        if not self._draft:
+            # Always create tags via the CLI as the GitHub API has a bug which
+            # only allows tags to be created for SHAs which are the the HEAD
+            # commit on a branch.
+            # https://github.com/JuliaRegistries/TagBot/issues/239#issuecomment-2246021651
+            self._git.create_tag(version_tag, sha, log)
+        logger.info(f"Creating release {version_tag} at {sha}")
+        self._repo.create_git_release(
+            version_tag, version_tag, log, target_commitish=target, draft=self._draft
+        )
+
+    def handle_error(self, e: Exception) -> None:
+        """Handle an unexpected error."""
+        allowed = False
+        internal = True
+        trace = traceback.format_exc()
+        if isinstance(e, RequestException):
+            logger.warning("TagBot encountered a likely transient HTTP exception")
+            logger.info(trace)
+            allowed = True
+        elif isinstance(e, GithubException):
+            logger.info(e.headers)
+            if 500 <= e.status < 600:
+                logger.warning("GitHub returned a 5xx error code")
+                logger.info(trace)
+                allowed = True
+            elif e.status == 403:
+                logger.error(
+                    """GitHub returned a 403 permissions-related error.
+                    Please check that your ssh key and TagBot permissions are up to date
+                    https://github.com/JuliaRegistries/TagBot#setup
+                    """
+                )
+                internal = False
+                allowed = False
+        if not allowed:
+            if internal:
+                logger.error("TagBot experienced an unexpected internal failure")
+            logger.info(trace)
+            try:
+                self._report_error(trace)
+            except Exception:
+                logger.error("Issue reporting failed")
+                logger.info(traceback.format_exc())
+            finally:
+                raise Abort("Cannot continue due to internal failure")
+
+    def commit_sha_of_version(self, version: str) -> Optional[str]:
+        """Get the commit SHA from a registered version."""
+        if version.startswith("v"):
+            version = version[1:]
+        root = self._registry_path
+        if not root:
+            logger.error("Package is not registered")
+            return None
+        if self._clone_registry:
+            with open(
+                os.path.join(self._registry_clone_dir, root, "Versions.toml")
+            ) as f:
+                versions = toml.load(f)
+        else:
+            contents = self._only(self._registry.get_contents(f"{root}/Versions.toml"))
+            versions = toml.loads(contents.decoded_content.decode())
+        if version not in versions:
+            logger.error(f"Version {version} is not registered")
+            return None
+        tree = versions[version]["git-tree-sha1"]
+        return self._commit_sha_of_tree(tree)
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/git.py
+```python
+import re
+import subprocess
+
+from datetime import datetime
+from tempfile import mkdtemp
+from typing import Optional, cast
+from urllib.parse import urlparse
+
+from .. import logger
+from . import Abort
+
+
+class Git:
+    """Provides access to a local Git repository."""
+
+    def __init__(
+        self, github: str, repo: str, token: str, user: str, email: str
+    ) -> None:
+        self._github = cast(str, urlparse(github).hostname)
+        self._repo = repo
+        self._token = token
+        self._user = user
+        self._email = email
+        self._gpgsign = False
+        self.__default_branch: Optional[str] = None
+        self.__dir: Optional[str] = None
+
+    @property
+    def _dir(self) -> str:
+        """Get the repository clone location (cloning if necessary)."""
+        if self.__dir is not None:
+            return self.__dir
+        url = f"https://oauth2:{self._token}@{self._github}/{self._repo}"
+        dest = mkdtemp(prefix="tagbot_repo_")
+        self.command("clone", url, dest, repo=None)
+        self.__dir = dest
+        return self.__dir
+
+    def default_branch(self, repo: str = "") -> str:
+        """Get the name of the default branch."""
+        if not repo and self.__default_branch is not None:
+            return self.__default_branch
+        remote = self.command("remote", "show", "origin", repo=repo)
+        m = re.search("HEAD branch:(.+)", remote)
+        if m:
+            branch = m[1].strip()
+        else:
+            logger.warning("Looking up default branch name failed, assuming master")
+            branch = "master"
+        if not repo:
+            self.__default_branch = branch
+        return branch
+
+    def command(self, *argv: str, repo: Optional[str] = "") -> str:
+        """Run a Git command."""
+        args = ["git"]
+        if repo is not None:
+            # Ideally, we'd set self._dir as the default for repo,
+            # but it gets evaluated at method definition.
+            args.extend(["-C", repo or self._dir])
+        args.extend(argv)
+        cmd = " ".join(args)
+        logger.debug(f"Running '{cmd}'")
+        proc = subprocess.run(args, text=True, capture_output=True)
+        out = proc.stdout.strip()
+        if proc.returncode:
+            if out:
+                logger.info(out)
+            if proc.stderr:
+                logger.info(proc.stderr.strip())
+            raise Abort(f"Git command '{cmd}' failed")
+        return out
+
+    def check(self, *argv: str, repo: Optional[str] = "") -> bool:
+        """Run a Git command, but only return its success status."""
+        try:
+            self.command(*argv, repo=repo)
+            return True
+        except Abort:
+            return False
+
+    def commit_sha_of_tree(self, tree: str) -> Optional[str]:
+        """Get the commit SHA of a corresponding tree SHA."""
+        # We need --all in case the registered commit isn't on the default branch.
+        for line in self.command("log", "--all", "--format=%H %T").splitlines():
+            # The format of each line is "<commit sha> <tree sha>".
+            c, t = line.split()
+            if t == tree:
+                return c
+        return None
+
+    def set_remote_url(self, url: str) -> None:
+        """Update the origin remote URL."""
+        self.command("remote", "set-url", "origin", url)
+
+    def config(self, key: str, val: str, repo: str = "") -> None:
+        """Configure the repository."""
+        self.command("config", key, val, repo=repo)
+
+    def create_tag(self, version: str, sha: str, message: str) -> None:
+        """Create and push a Git tag."""
+        self.config("user.name", self._user)
+        self.config("user.email", self._email)
+        # As mentioned in configure_gpg, we can't fully configure automatic signing.
+        sign = ["--sign"] if self._gpgsign else []
+        self.command("tag", *sign, "-m", message, version, sha)
+        self.command("push", "origin", version)
+
+    def fetch_branch(self, branch: str) -> bool:
+        """Try to checkout a remote branch, and return whether or not it succeeded."""
+        # Git lets us check out remote branches without the remote name,
+        # and automatically creates a local branch that tracks the remote one.
+        # Git does not let us do the same with a merge, so this method must be called
+        # before we call merge_and_delete_branch.
+        if not self.check("checkout", branch):
+            return False
+        self.command("checkout", self.default_branch())
+        return True
+
+    def is_merged(self, branch: str) -> bool:
+        """Determine if a branch has been merged."""
+        head = self.command("rev-parse", branch)
+        shas = self.command("log", self.default_branch(), "--format=%H").splitlines()
+        return head in shas
+
+    def can_fast_forward(self, branch: str) -> bool:
+        """Check whether the default branch can be fast-forwarded to branch."""
+        # https://stackoverflow.com/a/49272912
+        return self.check("merge-base", "--is-ancestor", self.default_branch(), branch)
+
+    def merge_and_delete_branch(self, branch: str) -> None:
+        """Merge a branch into master and delete the branch."""
+        self.command("checkout", self.default_branch())
+        self.command("merge", branch)
+        self.command("push", "origin", self.default_branch())
+        self.command("push", "-d", "origin", branch)
+
+    def time_of_commit(self, sha: str, repo: str = "") -> datetime:
+        """Get the time that a commit was made."""
+        # The format %cI is "committer date, strict ISO 8601 format".
+        date = self.command("show", "-s", "--format=%cI", sha, repo=repo)
+        dt = datetime.fromisoformat(date)
+        # Convert to UTC and remove time zone information.
+        offset = dt.utcoffset()
+        if offset:
+            dt -= offset
+        return dt.replace(tzinfo=None)
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/changelog.py
+```python
+import json
+import re
+
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+
+from github.GitRelease import GitRelease
+from github.Issue import Issue
+from github.NamedUser import NamedUser
+from github.PullRequest import PullRequest
+from jinja2 import Template
+from semver import VersionInfo
+
+from .. import logger
+
+if TYPE_CHECKING:
+    from .repo import Repo
+
+
+class Changelog:
+    """A Changelog produces release notes for a single release."""
+
+    DEFAULT_IGNORE = [
+        "changelog skip",
+        "duplicate",
+        "exclude from changelog",
+        "invalid",
+        "no changelog",
+        "question",
+        "skip changelog",
+        "wont fix",
+    ]
+
+    def __init__(self, repo: "Repo", template: str, ignore: List[str]) -> None:
+        self._repo = repo
+        self._template = Template(template, trim_blocks=True)
+        self._ignore = set(self._slug(s) for s in ignore)
+        self.__range: Optional[Tuple[datetime, datetime]] = None
+        self.__issues_and_pulls: Optional[List[Union[Issue, PullRequest]]] = None
+
+    def _slug(self, s: str) -> str:
+        """Return a version of the string that's easy to compare."""
+        return re.sub(r"[\s_-]", "", s.casefold())
+
+    def _previous_release(self, version_tag: str) -> Optional[GitRelease]:
+        """Get the release previous to the current one (according to SemVer)."""
+        tag_prefix = self._repo._tag_prefix()
+        i_start = len(tag_prefix)
+        cur_ver = VersionInfo.parse(version_tag[i_start:])
+        prev_ver = VersionInfo(0)
+        prev_rel = None
+        tag_prefix = self._repo._tag_prefix()
+        for r in self._repo._repo.get_releases():
+            if not r.tag_name.startswith(tag_prefix):
+                continue
+            try:
+                ver = VersionInfo.parse(r.tag_name[i_start:])
+            except ValueError:
+                continue
+            if ver.prerelease or ver.build:
+                continue
+            # Get the highest version that is not greater than the current one.
+            # That means if we're creating a backport v1.1, an already existing v2.0,
+            # despite being newer than v1.0, will not be selected.
+            if ver < cur_ver and ver > prev_ver:
+                prev_rel = r
+                prev_ver = ver
+        return prev_rel
+
+    def _is_backport(self, version: str, tags: Optional[List[str]] = None) -> bool:
+        """Determine whether or not the version is a backport."""
+        try:
+            version_pattern = re.compile(
+                r"^(.*?)[-v]?(\d+\.\d+\.\d+(?:\.\d+)*)(?:[-+].+)?$"
+            )
+
+            if tags is None:
+                # Populate the tags list with tag names from the releases
+                tags = [r.tag_name for r in self._repo._repo.get_releases()]
+
+            # Extract any package name prefix and version number from the input
+            match = version_pattern.match(version)
+            if not match:
+                raise ValueError(f"Invalid version format: {version}")
+            package_name = match.group(1)
+            cur_ver = VersionInfo.parse(match.group(2))
+
+            for tag in tags:
+                tag_match = version_pattern.match(tag)
+                if not tag_match:
+                    continue
+
+                tag_package_name = tag_match.group(1)
+
+                if tag_package_name != package_name:
+                    continue
+
+                try:
+                    tag_ver = VersionInfo.parse(tag_match.group(2))
+                except ValueError:
+                    continue
+
+                # Disregard prerelease and build versions
+                if tag_ver.prerelease or tag_ver.build:
+                    continue
+
+                # Check if the version is a backport
+                if tag_ver > cur_ver:
+                    return True
+
+            return False
+        except Exception as e:
+            # This is a best-effort function so we don't fail the entire process
+            logger.error(f"Checking if backport failed. Assuming False: {e}")
+            return False
+
+    def _issues_and_pulls(
+        self, start: datetime, end: datetime
+    ) -> List[Union[Issue, PullRequest]]:
+        """Collect issues and pull requests that were closed in the interval."""
+        # Even if we've previously cached some data,
+        # only return it if the interval is the same.
+        if self.__issues_and_pulls is not None and self.__range == (start, end):
+            return self.__issues_and_pulls
+        xs: List[Union[Issue, PullRequest]] = []
+        # Get all closed issues and merged PRs that were closed/merged in the interval.
+        for x in self._repo._repo.get_issues(state="closed", since=start):
+            # If a previous release's last commit closed an issue, then that issue
+            # should be included in the previous release's changelog and not this one.
+            # The interval includes the endpoint for this same reason.
+            if x.closed_at <= start or x.closed_at > end:
+                continue
+            if self._ignore.intersection(self._slug(label.name) for label in x.labels):
+                continue
+            if x.pull_request:
+                pr = x.as_pull_request()
+                if pr.merged:
+                    xs.append(pr)
+            else:
+                xs.append(x)
+        xs.reverse()  # Sort in chronological order.
+        self.__range = (start, end)
+        self.__issues_and_pulls = xs
+        return self.__issues_and_pulls
+
+    def _issues(self, start: datetime, end: datetime) -> List[Issue]:
+        """Collect just issues in the interval."""
+        return [i for i in self._issues_and_pulls(start, end) if isinstance(i, Issue)]
+
+    def _pulls(self, start: datetime, end: datetime) -> List[PullRequest]:
+        """Collect just pull requests in the interval."""
+        return [
+            p for p in self._issues_and_pulls(start, end) if isinstance(p, PullRequest)
+        ]
+
+    def _custom_release_notes(self, version_tag: str) -> Optional[str]:
+        """Look up a version's custom release notes."""
+        logger.debug("Looking up custom release notes")
+        tag_prefix = self._repo._tag_prefix()
+        i_start = len(tag_prefix) - 1
+        package_version = version_tag[i_start:]
+        pr = self._repo._registry_pr(package_version)
+        if not pr:
+            logger.warning("No registry pull request was found for this version")
+            return None
+        m = re.search(
+            "(?s)<!-- BEGIN RELEASE NOTES -->\n`````"
+            + "(.*)`````\n<!-- END RELEASE NOTES -->",
+            pr.body,
+        )
+        if m:
+            return m[1].strip()
+        # check for the old way, if it's an older PR
+        m = re.search(
+            "(?s)<!-- BEGIN RELEASE NOTES -->(.*)<!-- END RELEASE NOTES -->", pr.body
+        )
+        if m:
+            # Remove the '> ' at the beginning of each line.
+            return "\n".join(line[2:] for line in m[1].splitlines()).strip()
+        logger.debug("No custom release notes were found")
+        return None
+
+    def _format_user(self, user: Optional[NamedUser]) -> Dict[str, object]:
+        """Format a user for the template."""
+        if user:
+            return {
+                "name": user.name or user.login,
+                "url": user.html_url,
+                "username": user.login,
+            }
+        return {}
+
+    def _format_issue(self, issue: Issue) -> Dict[str, object]:
+        """Format an issue for the template."""
+        return {
+            "author": self._format_user(issue.user),
+            "body": issue.body,
+            "closer": self._format_user(issue.closed_by),
+            "labels": [label.name for label in issue.labels],
+            "number": issue.number,
+            "title": issue.title,
+            "url": issue.html_url,
+        }
+
+    def _format_pull(self, pull: PullRequest) -> Dict[str, object]:
+        """Format a pull request for the template."""
+        return {
+            "author": self._format_user(pull.user),
+            "body": pull.body,
+            "labels": [label.name for label in pull.labels],
+            "merger": self._format_user(pull.merged_by),
+            "number": pull.number,
+            "title": pull.title,
+            "url": pull.html_url,
+        }
+
+    def _collect_data(self, version_tag: str, sha: str) -> Dict[str, object]:
+        """Collect data needed to create the changelog."""
+        previous = self._previous_release(version_tag)
+        start = datetime.fromtimestamp(0, timezone.utc)
+        prev_tag = None
+        compare = None
+        if previous:
+            start = previous.created_at
+            prev_tag = previous.tag_name
+            compare = f"{self._repo._repo.html_url}/compare/{prev_tag}...{version_tag}"
+        # When the last commit is a PR merge, the commit happens a second or two before
+        # the PR and associated issues are closed.
+        commit = self._repo._repo.get_commit(sha)
+        end = commit.commit.author.date + timedelta(minutes=1)
+        logger.debug(f"Previous version: {prev_tag}")
+        logger.debug(f"Start date: {start}")
+        logger.debug(f"End date: {end}")
+        issues = self._issues(start, end)
+        pulls = self._pulls(start, end)
+        return {
+            "compare_url": compare,
+            "custom": self._custom_release_notes(version_tag),
+            "backport": self._is_backport(version_tag),
+            "issues": [self._format_issue(i) for i in issues],
+            "package": self._repo._project("name"),
+            "previous_release": prev_tag,
+            "pulls": [self._format_pull(p) for p in pulls],
+            "sha": sha,
+            "version": version_tag,
+            "version_url": f"{self._repo._repo.html_url}/tree/{version_tag}",
+        }
+
+    def _render(self, data: Dict[str, object]) -> str:
+        """Render the template."""
+        return self._template.render(data).strip()
+
+    def get(self, version_tag: str, sha: str) -> str:
+        """Get the changelog for a specific version."""
+        logger.info(f"Generating changelog for version {version_tag} ({sha})")
+        data = self._collect_data(version_tag, sha)
+        logger.debug(f"Changelog data: {json.dumps(data, indent=2)}")
+        return self._render(data)
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/local/__init__.py
+```python
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/local/__main__.py
+```python
+from pathlib import Path
+
+import click
+import yaml
+
+from ..action.repo import Repo
+
+with (Path(__file__).parent.parent.parent / "action.yml").open() as f:
+    action = yaml.safe_load(f)
+    GITHUB = action["inputs"]["github"]["default"]
+    GITHUB_API = action["inputs"]["github_api"]["default"]
+    CHANGELOG = action["inputs"]["changelog"]["default"]
+    REGISTRY = action["inputs"]["registry"]["default"]
+    DRAFT = action["inputs"]["draft"]["default"]
+    USER = action["inputs"]["user"]["default"]
+    EMAIL = action["inputs"]["email"]["default"]
+
+
+@click.command()
+@click.option("--repo", help="Repo to tag", prompt=True)
+@click.option("--version", help="Version to tag", prompt=True)
+@click.option("--token", help="GitHub API token", prompt=True, hide_input=True)
+@click.option("--github", default=GITHUB, help="GitHub URL")
+@click.option("--github-api", default=GITHUB_API, help="GitHub API URL")
+@click.option("--changelog", default=CHANGELOG, help="Changelog template")
+@click.option("--registry", default=REGISTRY, help="Registry to search")
+@click.option("--draft", default=DRAFT, help="Create a draft release", is_flag=True)
+@click.option("--subdir", default=None, help="Subdirectory path in repo")
+@click.option("--tag-prefix", default=None, help="Prefix for version tag")
+def main(
+    repo: str,
+    version: str,
+    token: str,
+    github: str,
+    github_api: str,
+    changelog: str,
+    registry: str,
+    draft: bool,
+    subdir: str,
+    tag_prefix: str,
+) -> None:
+    r = Repo(
+        repo=repo,
+        registry=registry,
+        github=github,
+        github_api=github_api,
+        token=token,
+        changelog=changelog,
+        changelog_ignore=[],
+        ssh=False,
+        gpg=False,
+        draft=draft,
+        registry_ssh="",
+        user=USER,
+        email=EMAIL,
+        lookback=0,
+        branch=None,
+        subdir=subdir,
+        tag_prefix=tag_prefix,
+    )
+    version = version if version.startswith("v") else f"v{version}"
+    sha = r.commit_sha_of_version(version)
+    if sha:
+        r.create_release(version, sha)
+    else:
+        print(f"Commit for {version} was not found")
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/web/__init__.py
+```python
+import json
+import os
+
+from typing import Dict, Optional, Tuple, TypeVar, Union, cast
+
+import boto3
+
+from flask import Flask, Response, render_template, request
+from werkzeug.exceptions import InternalServerError, MethodNotAllowed, NotFound
+
+from .. import log_handler
+
+T = TypeVar("T")
+StatusOptional = Union[T, Tuple[T, int]]
+HTML = StatusOptional[str]
+JSON = StatusOptional[Dict[str, object]]
+
+LAMBDA = boto3.client("lambda", region_name=os.getenv("AWS_REGION", "us-east-1"))
+REPORTS_FUNCTION_NAME = os.getenv("REPORTS_FUNCTION", "")
+TAGBOT_REPO_NAME = os.getenv("TAGBOT_REPO", "")
+TAGBOT_ISSUES_REPO_NAME = os.getenv("TAGBOT_ISSUES_REPO", "")
+
+app = Flask(__name__)
+app.logger.addHandler(log_handler)
+
+
+def _request_id() -> Optional[str]:
+    """Get the AWS request ID if it's set."""
+    ctx = request.environ.get("context")
+    return ctx.aws_request_id if ctx else None
+
+
+@app.after_request
+def after_request(r: Response) -> Response:
+    msg = f"{request.method} {request.path}: {r.status_code}"
+    req_id = _request_id()
+    if req_id:
+        msg = f"{req_id} - {msg}"
+    app.logger.info(msg)
+    return r
+
+
+@app.errorhandler(NotFound)
+def not_found(e: NotFound) -> Union[HTML, JSON]:
+    if request.is_json:
+        resp: JSON = ({"error": "Not found"}, 404)
+        return resp
+    return render_template("404.html"), 404
+
+
+@app.errorhandler(MethodNotAllowed)
+def method_not_allowed(e: MethodNotAllowed) -> Union[HTML, JSON]:
+    if request.is_json:
+        resp: JSON = ({"error": "Method not allowed"}, 405)
+        return resp
+    return render_template("405.html"), 405
+
+
+@app.errorhandler(InternalServerError)
+def error(e: InternalServerError) -> Union[HTML, JSON]:
+    req_id = _request_id()
+    # mypy really hates this.
+    if request.is_json:
+        json = {"error": "Internal server error", "request_id": req_id}
+        return cast(JSON, (json, 500))
+    html = render_template("500.html", request_id=req_id, tagbot_repo=TAGBOT_REPO_NAME)
+    return html, 500
+
+
+@app.route("/")
+def index() -> HTML:
+    return render_template("index.html")
+
+
+@app.route("/report", methods=["POST"])
+def report() -> JSON:
+    # json is optional so there needs to be a None path
+    if request.json is not None:
+        payload = {
+            "image": request.json["image"],
+            "repo": request.json["repo"],
+            "run": request.json["run"],
+            "stacktrace": request.json["stacktrace"],
+        }
+    else:
+        payload = {}
+    LAMBDA.invoke(FunctionName=REPORTS_FUNCTION_NAME, Payload=json.dumps(payload))
+    return {"status": "Submitted error report"}, 200
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/test/test_tagbot.py
+```python
+from io import StringIO
+from logging import DEBUG, StreamHandler, getLogger
+from time import sleep, strftime
+
+from tagbot import LogFormatter
+
+
+stream = StringIO()
+handler = StreamHandler(stream)
+logger = getLogger("actions")
+logger.addHandler(handler)
+logger.setLevel(DEBUG)
+
+
+def test_actions_logger():
+    start = stream.tell()
+    handler.setFormatter(LogFormatter("actions"))
+    logger.debug("1")
+    logger.info("2")
+    logger.warning("3")
+    logger.error("4")
+    logger.debug("a%b\nc\rd")
+    logger.info("a%b\nc\rd")
+    stream.seek(start)
+    assert stream.readlines() == [
+        "::debug ::1\n",
+        "2\n",
+        "::warning ::3\n",
+        "::error ::4\n",
+        "::debug ::a%25b%0Ac%0Dd\n",
+        "a%b\n",
+        "c\rd\n",
+    ]
+
+
+def test_fallback_logger():
+    start = stream.tell()
+    handler.setFormatter(LogFormatter("other"))
+    # We can't mock time, so start this test when a new second comes around.
+    now = strftime("%H:%M:%S")
+    while strftime("%H:%M:%S") == now:
+        sleep(0.01)
+    logger.debug("1")
+    logger.info("2")
+    logger.warning("3")
+    logger.error("4")
+    logger.debug("a\nb")
+    now = strftime("%H:%M:%S")
+    stream.seek(start)
+    assert stream.readlines() == [
+        f"{now} | DEBUG | 1\n",
+        f"{now} | INFO | 2\n",
+        f"{now} | WARNING | 3\n",
+        f"{now} | ERROR | 4\n",
+        f"{now} | DEBUG | a\n",
+        "b\n",
+    ]
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/test/action/test_git.py
+```python
+from datetime import datetime
+from unittest.mock import Mock, call, patch
+
+import pytest
+
+from tagbot.action import Abort
+from tagbot.action.git import Git
+
+
+def _git(
+    github="", repo="", token="", user="user", email="a@b.c", command=None, check=None
+) -> Git:
+    g = Git(github, repo, token, user, email)
+    if command:
+        m = g.command = Mock()
+        if isinstance(command, list):
+            m.side_effect = command
+        else:
+            m.return_value = command
+    if check:
+        m = g.check = Mock()
+        if isinstance(check, list):
+            m.side_effect = check
+        else:
+            m.return_value = check
+    return g
+
+
+@patch("subprocess.run")
+def test_command(run):
+    g = Git("", "Foo/Bar", "x", "user", "email")
+    g._Git__dir = "dir"
+    run.return_value.configure_mock(stdout="out\n", returncode=0)
+    assert g.command("a") == "out"
+    assert g.command("b", repo=None) == "out"
+    assert g.command("c", repo="foo") == "out"
+    calls = [
+        call(["git", "-C", "dir", "a"], text=True, capture_output=True),
+        call(["git", "b"], text=True, capture_output=True),
+        call(["git", "-C", "foo", "c"], text=True, capture_output=True),
+    ]
+    run.assert_has_calls(calls)
+    run.return_value.configure_mock(stderr="err\n", returncode=1)
+    with pytest.raises(Abort):
+        g.command("d")
+
+
+def test_check():
+    g = _git(command=["abc", Abort()])
+    assert g.check("foo")
+    assert not g.check("bar", repo="dir")
+    g.command.assert_has_calls([call("foo", repo=""), call("bar", repo="dir")])
+
+
+@patch("tagbot.action.git.mkdtemp", return_value="dir")
+def test_dir(mkdtemp):
+    g = _git(github="https://gh.com", repo="Foo/Bar", token="x", command=["", "branch"])
+    assert g._dir == "dir"
+    assert g._dir == "dir"
+    # Second call should not clone.
+    mkdtemp.assert_called_once()
+    g.command.assert_called_once_with(
+        "clone", "https://oauth2:x@gh.com/Foo/Bar", "dir", repo=None
+    )
+
+
+def test_default_branch():
+    g = _git(command=["foo\nHEAD branch: default\nbar", "uhhhh"])
+    assert g.default_branch() == "default"
+    assert g.default_branch() == "default"
+    g.command.assert_called_once_with("remote", "show", "origin", repo="")
+    g._Git__default_branch = None
+    assert g.default_branch() == "master"
+
+
+def test_commit_sha_of_tree():
+    g = _git(command="a b\n c d\n d e\n")
+    assert g.commit_sha_of_tree("b") == "a"
+    g.command.assert_called_with("log", "--all", "--format=%H %T")
+    assert g.commit_sha_of_tree("e") == "d"
+    assert g.commit_sha_of_tree("c") is None
+
+
+def test_set_remote_url():
+    g = _git(command="hi")
+    g.set_remote_url("url")
+    g.command.assert_called_with("remote", "set-url", "origin", "url")
+
+
+def test_config():
+    g = _git(command="ok")
+    g.config("a", "b")
+    g.command.assert_called_with("config", "a", "b", repo="")
+
+
+def test_create_tag():
+    g = _git(user="me", email="hi@foo.bar", command="hm")
+    g.config = Mock()
+    g.create_tag("v1", "abcdef", "log")
+    calls = [
+        call("user.name", "me"),
+        call("user.email", "hi@foo.bar"),
+    ]
+    g.config.assert_has_calls(calls)
+    calls = [
+        call("tag", "-m", "log", "v1", "abcdef"),
+        call("push", "origin", "v1"),
+    ]
+    g.command.assert_has_calls(calls)
+
+
+def test_fetch_branch():
+    g = _git(check=[False, True], command="ok")
+    g._Git__default_branch = "default"
+    assert not g.fetch_branch("a")
+    g.check.assert_called_with("checkout", "a")
+    assert g.fetch_branch("b")
+    g.command.assert_called_with("checkout", "default")
+
+
+def test_is_merged():
+    g = _git(command=["b", "a\nb\nc", "d", "a\nb\nc"])
+    g._Git__default_branch = "default"
+    assert g.is_merged("foo")
+    calls = [call("rev-parse", "foo"), call("log", "default", "--format=%H")]
+    g.command.assert_has_calls(calls)
+    assert not g.is_merged("bar")
+
+
+def test_can_fast_forward():
+    g = _git(check=[False, True])
+    g._Git__default_branch = "default"
+    assert not g.can_fast_forward("a")
+    g.check.assert_called_with("merge-base", "--is-ancestor", "default", "a")
+    assert g.can_fast_forward("b")
+
+
+def test_merge_and_delete_branch():
+    g = _git(command="ok")
+    g._Git__default_branch = "default"
+    g.merge_and_delete_branch("a")
+    calls = [
+        call("checkout", "default"),
+        call("merge", "a"),
+        call("push", "origin", "default"),
+        call("push", "-d", "origin", "a"),
+    ]
+    g.command.assert_has_calls(calls)
+
+
+def test_time_of_commit():
+    g = _git(command="2019-12-22T12:49:26+07:00")
+    assert g.time_of_commit("a") == datetime(2019, 12, 22, 5, 49, 26)
+    g.command.assert_called_with("show", "-s", "--format=%cI", "a", repo="")
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/test/action/test_changelog.py
+```python
+import os.path
+import textwrap
+
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
+
+import yaml
+
+from github.Issue import Issue
+from github.PullRequest import PullRequest
+
+from tagbot.action.repo import Repo
+
+
+def _changelog(*, template="", ignore=set(), subdir=None):
+    r = Repo(
+        repo="",
+        registry="",
+        github="",
+        github_api="",
+        token="x",
+        changelog=template,
+        changelog_ignore=ignore,
+        ssh=False,
+        gpg=False,
+        draft=False,
+        registry_ssh="",
+        user="",
+        email="",
+        lookback=3,
+        branch=None,
+        subdir=subdir,
+    )
+    return r._changelog
+
+
+def test_slug():
+    c = _changelog()
+    assert c._slug("A b-c_d") == "abcd"
+
+
+def test_previous_release():
+    c = _changelog()
+    tags = ["ignore", "v1.2.4-ignore", "v1.2.3", "v1.2.2", "v1.0.2", "v1.0.10"]
+    c._repo._repo.get_releases = Mock(return_value=[Mock(tag_name=t) for t in tags])
+    assert c._previous_release("v1.0.0") is None
+    assert c._previous_release("v1.0.2") is None
+    rel = c._previous_release("v1.2.5")
+    assert rel and rel.tag_name == "v1.2.3"
+    rel = c._previous_release("v1.0.3")
+    assert rel and rel.tag_name == "v1.0.2"
+
+
+def test_previous_release_subdir():
+    True
+    c = _changelog(subdir="Foo")
+    c._repo._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "Foo"\nuuid="abc-def"\n""")
+    )
+    tags = [
+        "ignore",
+        "v1.2.4-ignore",
+        "Foo-v1.2.3",
+        "Foo-v1.2.2",
+        "Foo-v1.0.2",
+        "Foo-v1.0.10",
+        "v2.0.1",
+        "Foo-v2.0.0",
+    ]
+    c._repo._repo.get_releases = Mock(return_value=[Mock(tag_name=t) for t in tags])
+    assert c._previous_release("Foo-v1.0.0") is None
+    assert c._previous_release("Foo-v1.0.2") is None
+    rel = c._previous_release("Foo-v1.2.5")
+    assert rel and rel.tag_name == "Foo-v1.2.3"
+    rel = c._previous_release("Foo-v1.0.3")
+    assert rel and rel.tag_name == "Foo-v1.0.2"
+    rel = c._previous_release("Foo-v2.1.0")
+    assert rel and rel.tag_name == "Foo-v2.0.0"
+
+
+def test_issues_and_pulls():
+    c = _changelog()
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=10)
+    end = now
+    c._repo._repo.get_issues = Mock(return_value=[])
+    assert c._issues_and_pulls(end, end) == []
+    assert c._issues_and_pulls(end, end) == []
+    c._repo._repo.get_issues.assert_called_once_with(state="closed", since=end)
+    assert c._issues_and_pulls(end, end) == []
+    c._repo._repo.get_issues.assert_called_with(state="closed", since=end)
+    n = 1
+    for days in [-1, 0, 5, 10, 11]:
+        i = Mock(
+            closed_at=end - timedelta(days=days), n=n, pull_request=False, labels=[]
+        )
+        p = Mock(
+            closed_at=end - timedelta(days=days),
+            pull_request=True,
+            labels=[],
+            as_pull_request=Mock(return_value=Mock(merged=days % 2 == 0, n=n + 1)),
+        )
+        n += 2
+        c._repo._repo.get_issues.return_value.extend([i, p])
+    assert [x.n for x in c._issues_and_pulls(start, end)] == [5, 4, 3]
+
+
+def test_issues_pulls():
+    c = _changelog()
+    mocks = []
+    for i in range(0, 20, 2):
+        mocks.append(Mock(spec=Issue, number=i))
+        mocks.append(Mock(spec=PullRequest, number=i + 1))
+    c._issues_and_pulls = Mock(return_value=mocks)
+    a = datetime(1, 1, 1)
+    b = datetime(2, 2, 2)
+    assert all(isinstance(x, Issue) and not x.number % 2 for x in c._issues(a, b))
+    c._issues_and_pulls.assert_called_with(a, b)
+    assert all(isinstance(x, PullRequest) and x.number % 2 for x in c._pulls(b, a))
+    c._issues_and_pulls.assert_called_with(b, a)
+
+
+def test_custom_release_notes():
+    c = _changelog()
+    notes = """
+    blah blah blah
+    <!-- BEGIN RELEASE NOTES -->
+    `````
+    Foo
+    Bar
+    `````
+    <!-- END RELEASE NOTES -->
+    blah blah blah
+    """
+    notes = textwrap.dedent(notes)
+    c._repo._registry_pr = Mock(side_effect=[None, Mock(body="foo"), Mock(body=notes)])
+    assert c._custom_release_notes("v1.2.3") is None
+    c._repo._registry_pr.assert_called_with("v1.2.3")
+    assert c._custom_release_notes("v2.3.4") is None
+    c._repo._registry_pr.assert_called_with("v2.3.4")
+    assert c._custom_release_notes("v3.4.5") == "Foo\nBar"
+    c._repo._registry_pr.assert_called_with("v3.4.5")
+
+
+def test_old_format_custom_release_notes():
+    c = _changelog()
+    notes = """
+    blah blah blah
+    <!-- BEGIN RELEASE NOTES -->
+    > Foo
+    > Bar
+    <!-- END RELEASE NOTES -->
+    blah blah blah
+    """
+    notes = textwrap.dedent(notes)
+    c._repo._registry_pr = Mock(side_effect=[None, Mock(body="foo"), Mock(body=notes)])
+    assert c._custom_release_notes("v1.2.3") is None
+    c._repo._registry_pr.assert_called_with("v1.2.3")
+    assert c._custom_release_notes("v2.3.4") is None
+    c._repo._registry_pr.assert_called_with("v2.3.4")
+    assert c._custom_release_notes("v3.4.5") == "Foo\nBar"
+    c._repo._registry_pr.assert_called_with("v3.4.5")
+
+
+def test_format_user():
+    c = _changelog()
+    m = Mock(html_url="url", login="username")
+    m.name = "Name"
+    assert c._format_user(m) == {"name": "Name", "url": "url", "username": "username"}
+    assert c._format_user(None) == {}
+
+
+def test_format_issue_pull():
+    c = _changelog()
+    m = Mock(
+        user=Mock(html_url="url", login="username"),
+        closed_by=Mock(html_url="url", login="username"),
+        merged_by=Mock(html_url="url", login="username"),
+        body="body",
+        labels=[Mock(), Mock()],
+        number=1,
+        title="title",
+        html_url="url",
+    )
+    m.user.name = "User"
+    m.closed_by.name = "Closer"
+    m.merged_by.name = "Merger"
+    m.labels[0].name = "label1"
+    m.labels[1].name = "label2"
+    assert c._format_issue(m) == {
+        "author": {"name": "User", "url": "url", "username": "username"},
+        "body": "body",
+        "labels": ["label1", "label2"],
+        "closer": {"name": "Closer", "url": "url", "username": "username"},
+        "number": 1,
+        "title": "title",
+        "url": "url",
+    }
+    assert c._format_pull(m) == {
+        "author": {"name": "User", "url": "url", "username": "username"},
+        "body": "body",
+        "labels": ["label1", "label2"],
+        "merger": {"name": "Merger", "url": "url", "username": "username"},
+        "number": 1,
+        "title": "title",
+        "url": "url",
+    }
+
+
+def test_collect_data():
+    c = _changelog()
+    c._repo._repo = Mock(full_name="A/B.jl", html_url="https://github.com/A/B.jl")
+    c._repo._project = Mock(return_value="B")
+    c._previous_release = Mock(
+        side_effect=[
+            Mock(tag_name="v1.2.2", created_at=datetime.now(timezone.utc)),
+            None,
+        ]
+    )
+    c._is_backport = Mock(return_value=False)
+    commit = Mock(author=Mock(date=datetime.now(timezone.utc)))
+    c._repo._repo.get_commit = Mock(return_value=Mock(commit=commit))
+    # TODO: Put stuff here.
+    c._issues = Mock(return_value=[])
+    c._pulls = Mock(return_value=[])
+    c._custom_release_notes = Mock(return_value="custom")
+    assert c._collect_data("v1.2.3", "abcdef") == {
+        "compare_url": "https://github.com/A/B.jl/compare/v1.2.2...v1.2.3",
+        "custom": "custom",
+        "backport": False,
+        "issues": [],
+        "package": "B",
+        "previous_release": "v1.2.2",
+        "pulls": [],
+        "sha": "abcdef",
+        "version": "v1.2.3",
+        "version_url": "https://github.com/A/B.jl/tree/v1.2.3",
+    }
+    data = c._collect_data("v2.3.4", "bcdefa")
+    assert data["compare_url"] is None
+    assert data["previous_release"] is None
+
+
+def test_is_backport():
+    c = _changelog()
+    assert c._is_backport("v1.2.3", ["v1.2.1", "v1.2.2"]) is False
+    assert c._is_backport("v1.2.3", ["v1.2.1", "v1.2.2", "v2.0.0"]) is True
+    assert c._is_backport("Foo-v1.2.3", ["v1.2.1", "v1.2.2", "v2.0.0"]) is False
+    assert c._is_backport("Foo-v1.2.3", ["Foo-v1.2.2", "Foo-v2.0.0"]) is True
+    assert c._is_backport("Foo-v1.2.3", ["Foo-v1.2.2", "Bar-v2.0.0"]) is False
+    assert c._is_backport("v1.2.3", []) is False
+    assert c._is_backport("v1.2.3", ["v1.2.3"]) is False
+
+
+def test_render():
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "action.yml")
+    with open(path) as f:
+        action = yaml.safe_load(f)
+    default = action["inputs"]["changelog"]["default"]
+    c = _changelog(template=default)
+    expected = """
+    ## PkgName v1.2.3
+
+    [Diff since v1.2.2](https://github.com/Me/PkgName.jl/compare/v1.2.2...v1.2.3)
+
+    Custom release notes
+
+    **Merged pull requests:**
+    - Pull title (#3) (@author)
+
+    **Closed issues:**
+    - Issue title (#1)
+    """
+    data = {
+        "compare_url": "https://github.com/Me/PkgName.jl/compare/v1.2.2...v1.2.3",
+        "custom": "Custom release notes",
+        "backport": False,
+        "issues": [{"number": 1, "title": "Issue title", "labels": []}],
+        "package": "PkgName",
+        "previous_release": "v1.2.2",
+        "pulls": [
+            {
+                "number": 3,
+                "title": "Pull title",
+                "labels": [],
+                "author": {"username": "author"},
+            },
+        ],
+        "version": "v1.2.3",
+        "version_url": "https://github.com/Me/PkgName.jl/tree/v1.2.3",
+    }
+    assert c._render(data) == textwrap.dedent(expected).strip()
+    del data["pulls"]
+    assert "**Merged pull requests:**" not in c._render(data)
+    del data["issues"]
+    assert "**Closed issues:**" not in c._render(data)
+    data["previous_release"] = None
+    assert "Diff since" not in c._render(data)
+
+
+def test_render_backport():
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "action.yml")
+    with open(path) as f:
+        action = yaml.safe_load(f)
+    default = action["inputs"]["changelog"]["default"]
+    c = _changelog(template=default)
+    expected = """
+    ## PkgName v1.2.3
+
+    [Diff since v1.2.2](https://github.com/Me/PkgName.jl/compare/v1.2.2...v1.2.3)
+
+    Custom release notes
+
+    This release has been identified as a backport.
+    Automated changelogs for backports tend to be wildly incorrect.
+    Therefore, the list of issues and pull requests is hidden.
+    <!--
+    **Merged pull requests:**
+    - Pull title (#3) (@author)
+
+    **Closed issues:**
+    - Issue title (#1)
+
+    -->
+    """
+    data = {
+        "compare_url": "https://github.com/Me/PkgName.jl/compare/v1.2.2...v1.2.3",
+        "custom": "Custom release notes",
+        "backport": True,
+        "issues": [{"number": 1, "title": "Issue title", "labels": []}],
+        "package": "PkgName",
+        "previous_release": "v1.2.2",
+        "pulls": [
+            {
+                "number": 3,
+                "title": "Pull title",
+                "labels": [],
+                "author": {"username": "author"},
+            },
+        ],
+        "version": "v1.2.3",
+        "version_url": "https://github.com/Me/PkgName.jl/tree/v1.2.3",
+    }
+    assert c._render(data) == textwrap.dedent(expected).strip()
+    del data["pulls"]
+    assert "**Merged pull requests:**" not in c._render(data)
+    del data["issues"]
+    assert "**Closed issues:**" not in c._render(data)
+    data["previous_release"] = None
+    assert "Diff since" not in c._render(data)
+
+
+def test_get():
+    c = _changelog(template="{{ version }}")
+    c._collect_data = Mock(return_value={"version": "v1.2.3"})
+    assert c.get("v1.2.3", "abc") == "v1.2.3"
+    c._collect_data.assert_called_once_with("v1.2.3", "abc")
+
+    c = _changelog(template="{{ version }}")
+    c._collect_data = Mock(return_value={"version": "Foo-v1.2.3"})
+    assert c.get("Foo-v1.2.3", "abc") == "Foo-v1.2.3"
+    c._collect_data.assert_called_once_with("Foo-v1.2.3", "abc")
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/test/action/test_repo.py
+```python
+import os
+
+from base64 import b64encode
+from datetime import datetime, timedelta, timezone
+from stat import S_IREAD, S_IWRITE, S_IEXEC
+from subprocess import DEVNULL
+from unittest.mock import Mock, call, mock_open, patch
+
+import pytest
+
+from github import GithubException, UnknownObjectException
+from github.Requester import requests
+
+from tagbot.action import TAGBOT_WEB, Abort, InvalidProject
+from tagbot.action.repo import Repo
+
+RequestException = requests.RequestException
+
+
+def _repo(
+    *,
+    repo="",
+    registry="",
+    github="",
+    github_api="",
+    token="x",
+    changelog="",
+    ignore=[],
+    ssh=False,
+    gpg=False,
+    draft=False,
+    registry_ssh="",
+    user="",
+    email="",
+    lookback=3,
+    branch=None,
+    subdir=None,
+    tag_prefix=None,
+):
+    return Repo(
+        repo=repo,
+        registry=registry,
+        github=github,
+        github_api=github_api,
+        token=token,
+        changelog=changelog,
+        changelog_ignore=ignore,
+        ssh=ssh,
+        gpg=gpg,
+        draft=draft,
+        registry_ssh=registry_ssh,
+        user=user,
+        email=email,
+        lookback=lookback,
+        branch=branch,
+        subdir=subdir,
+        tag_prefix=tag_prefix,
+    )
+
+
+def test_constuctor():
+    r = _repo(github="github.com", github_api="api.github.com")
+    assert r._gh_url == "https://github.com"
+    assert r._gh_api == "https://api.github.com"
+    assert r._git._github == "github.com"
+    r = _repo(github="https://github.com", github_api="https://api.github.com")
+    assert r._gh_url == "https://github.com"
+    assert r._gh_api == "https://api.github.com"
+    assert r._git._github == "github.com"
+
+
+def test_project():
+    r = _repo()
+    r._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r._project("name") == "FooBar"
+    assert r._project("uuid") == "abc-def"
+    assert r._project("name") == "FooBar"
+    r._repo.get_contents.assert_called_once_with("Project.toml")
+    r._repo.get_contents.side_effect = UnknownObjectException(404, "???", {})
+    r._Repo__project = None
+    with pytest.raises(InvalidProject):
+        r._project("name")
+
+
+def test_project_subdir():
+    r = _repo(subdir="path/to/FooBar.jl")
+    r._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r._project("name") == "FooBar"
+    assert r._project("uuid") == "abc-def"
+    r._repo.get_contents.assert_called_once_with("path/to/FooBar.jl/Project.toml")
+    r._repo.get_contents.side_effect = UnknownObjectException(404, "???", {})
+    r._Repo__project = None
+    with pytest.raises(InvalidProject):
+        r._project("name")
+
+
+def test_registry_path():
+    r = _repo()
+    r._registry = Mock()
+    r._registry.get_contents.return_value.sha = "123"
+    r._registry.get_git_blob.return_value.content = b64encode(
+        b"""
+        [packages]
+        abc-def = { path = "B/Bar" }
+        """
+    )
+    r._project = lambda _k: "abc-ddd"
+    assert r._registry_path is None
+    r._project = lambda _k: "abc-def"
+    assert r._registry_path == "B/Bar"
+    assert r._registry_path == "B/Bar"
+    assert r._registry.get_contents.call_count == 2
+
+
+def test_registry_url():
+    r = _repo()
+    r._Repo__registry_path = "E/Example"
+    r._registry = Mock()
+    r._registry.get_contents.return_value.decoded_content = b"""
+    name = "Example"
+    uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+    repo = "https://github.com/JuliaLang/Example.jl.git"
+    """
+    assert r._registry_url == "https://github.com/JuliaLang/Example.jl.git"
+    assert r._registry_url == "https://github.com/JuliaLang/Example.jl.git"
+    assert r._registry.get_contents.call_count == 1
+
+
+def test_release_branch():
+    r = _repo()
+    r._repo = Mock(default_branch="a")
+    assert r._release_branch == "a"
+    r = _repo(branch="b")
+    assert r._release_branch == "b"
+
+
+def test_only():
+    r = _repo()
+    assert r._only(1) == 1
+    assert r._only([1]) == 1
+    assert r._only([[1]]) == [1]
+
+
+def test_maybe_decode_private_key():
+    r = _repo()
+    plain = "BEGIN OPENSSH PRIVATE KEY foo bar"
+    b64 = b64encode(plain.encode()).decode()
+    assert r._maybe_decode_private_key(plain) == plain
+    assert r._maybe_decode_private_key(b64) == plain
+
+
+def test_create_release_branch_pr():
+    r = _repo()
+    r._repo = Mock(default_branch="default")
+    r._create_release_branch_pr("v1.2.3", "branch")
+    r._repo.create_pull.assert_called_once_with(
+        title="Merge release branch for v1.2.3", body="", head="branch", base="default"
+    )
+
+    r._repo = Mock(default_branch="default")
+    r._create_release_branch_pr("Foo-v1.2.3", "branch")
+    r._repo.create_pull.assert_called_once_with(
+        title="Merge release branch for Foo-v1.2.3",
+        body="",
+        head="branch",
+        base="default",
+    )
+
+
+def test_registry_pr():
+    r = _repo()
+    r._Repo__project = {"name": "PkgName", "uuid": "abcdef0123456789"}
+    r._registry = Mock(owner=Mock(login="Owner"))
+    now = datetime.now(timezone.utc)
+    owner_pr = Mock(merged_at=now)
+    r._registry.get_pulls.return_value = [owner_pr]
+    r._Repo__registry_url = "https://github.com/Org/pkgname.jl.git"
+    assert r._registry_pr("v1.2.3") is owner_pr
+    r._registry.get_pulls.assert_called_once_with(
+        head="Owner:registrator-pkgname-abcdef01-v1.2.3-d745cc13b3", state="closed"
+    )
+    r._registry.get_pulls.side_effect = [[], [Mock(closed_at=now - timedelta(days=10))]]
+    assert r._registry_pr("v2.3.4") is None
+    calls = [
+        call(
+            head="Owner:registrator-pkgname-abcdef01-v2.3.4-d745cc13b3", state="closed"
+        ),
+        call(state="closed"),
+    ]
+    r._registry.get_pulls.assert_has_calls(calls)
+    good_pr = Mock(
+        closed_at=now - timedelta(days=2),
+        merged=True,
+        head=Mock(ref="registrator-pkgname-abcdef01-v3.4.5-d745cc13b3"),
+    )
+    r._registry.get_pulls.side_effect = [[], [good_pr]]
+    assert r._registry_pr("v3.4.5") is good_pr
+    calls = [
+        call(
+            head="Owner:registrator-pkgname-abcdef01-v3.4.5-d745cc13b3", state="closed"
+        ),
+        call(state="closed"),
+    ]
+    r._registry.get_pulls.assert_has_calls(calls)
+
+
+@patch("tagbot.action.repo.logger")
+def test_commit_sha_from_registry_pr(logger):
+    r = _repo()
+    r._registry_pr = Mock(return_value=None)
+    assert r._commit_sha_from_registry_pr("v1.2.3", "abc") is None
+    logger.info.assert_called_with("Did not find registry PR")
+    r._registry_pr.return_value = Mock(body="")
+    assert r._commit_sha_from_registry_pr("v2.3.4", "bcd") is None
+    logger.info.assert_called_with("Registry PR body did not match")
+    r._registry_pr.return_value.body = f"foo\n- Commit: {'a' * 32}\nbar"
+    r._repo.get_commit = Mock()
+    r._repo.get_commit.return_value.commit.tree.sha = "def"
+    r._repo.get_commit.return_value.sha = "sha"
+    assert r._commit_sha_from_registry_pr("v3.4.5", "cde") is None
+    r._repo.get_commit.assert_called_with("a" * 32)
+    logger.warning.assert_called_with(
+        "Tree SHA of commit from registry PR does not match"
+    )
+    assert r._commit_sha_from_registry_pr("v4.5.6", "def") == "sha"
+
+
+def test_commit_sha_of_tree_from_branch():
+    r = _repo()
+    since = datetime.now(timezone.utc)
+    r._repo.get_commits = Mock(return_value=[Mock(sha="abc"), Mock(sha="sha")])
+    r._repo.get_commits.return_value[1].commit.tree.sha = "tree"
+    assert r._commit_sha_of_tree_from_branch("master", "tree", since) == "sha"
+    r._repo.get_commits.assert_called_with(sha="master", since=since)
+    r._repo.get_commits.return_value.pop()
+    assert r._commit_sha_of_tree_from_branch("master", "tree", since) is None
+
+
+def test_commit_sha_of_tree():
+    r = _repo()
+    now = datetime.now(timezone.utc)
+    r._repo = Mock(default_branch="master")
+    branches = r._repo.get_branches.return_value = [Mock(), Mock()]
+    branches[0].name = "foo"
+    branches[1].name = "master"
+    r._lookback = Mock(__rsub__=lambda x, y: now)
+    r._commit_sha_of_tree_from_branch = Mock(side_effect=["sha1", None, "sha2"])
+    assert r._commit_sha_of_tree("tree") == "sha1"
+    r._repo.get_branches.assert_not_called()
+    r._commit_sha_of_tree_from_branch.assert_called_once_with("master", "tree", now)
+    assert r._commit_sha_of_tree("tree") == "sha2"
+    r._commit_sha_of_tree_from_branch.assert_called_with("foo", "tree", now)
+    r._commit_sha_of_tree_from_branch.side_effect = None
+    r._commit_sha_of_tree_from_branch.return_value = None
+    r._git.commit_sha_of_tree = Mock(side_effect=["sha", None])
+    assert r._commit_sha_of_tree("tree") == "sha"
+    assert r._commit_sha_of_tree("tree") is None
+
+
+def test_commit_sha_of_tag():
+    r = _repo()
+    r._repo.get_git_ref = Mock()
+    r._repo.get_git_ref.return_value.object.type = "commit"
+    r._repo.get_git_ref.return_value.object.sha = "c"
+    assert r._commit_sha_of_tag("v1.2.3") == "c"
+    r._repo.get_git_ref.assert_called_with("tags/v1.2.3")
+    r._repo.get_git_ref.return_value.object.type = "tag"
+    r._repo.get_git_tag = Mock()
+    r._repo.get_git_tag.return_value.object.sha = "t"
+    assert r._commit_sha_of_tag("v2.3.4") == "t"
+    r._repo.get_git_tag.assert_called_with("c")
+    r._repo.get_git_ref.return_value.object = None
+    assert r._commit_sha_of_tag("v3.4.5") is None
+    r._repo.get_git_ref.side_effect = UnknownObjectException(404, "???", {})
+    assert r._commit_sha_of_tag("v4.5.6") is None
+
+
+def test_commit_sha_of_release_branch():
+    r = _repo()
+    r._repo = Mock(default_branch="a")
+    r._repo.get_branch.return_value.commit.sha = "sha"
+    assert r._commit_sha_of_release_branch() == "sha"
+    r._repo.get_branch.assert_called_with("a")
+
+
+@patch("tagbot.action.repo.logger")
+def test_filter_map_versions(logger):
+    r = _repo()
+    r._commit_sha_from_registry_pr = Mock(return_value=None)
+    r._commit_sha_of_tree = Mock(return_value=None)
+    assert not r._filter_map_versions({"1.2.3": "tree1"})
+    logger.warning.assert_called_with(
+        "No matching commit was found for version v1.2.3 (tree1)"
+    )
+    r._commit_sha_of_tree.return_value = "sha"
+    r._commit_sha_of_tag = Mock(return_value="sha")
+    assert not r._filter_map_versions({"2.3.4": "tree2"})
+    logger.info.assert_called_with("Tag v2.3.4 already exists")
+    r._commit_sha_of_tag.return_value = "abc"
+    assert not r._filter_map_versions({"3.4.5": "tree3"})
+    logger.error.assert_called_with(
+        "Existing tag v3.4.5 points at the wrong commit (expected sha)"
+    )
+    r._commit_sha_of_tag.return_value = None
+    assert r._filter_map_versions({"4.5.6": "tree4"}) == {"v4.5.6": "sha"}
+
+
+@patch("tagbot.action.repo.logger")
+def test_versions(logger):
+    r = _repo()
+    r._Repo__registry_path = "path"
+    r._registry = Mock()
+    r._registry.get_contents.return_value.decoded_content = b"""
+    ["1.2.3"]
+    git-tree-sha1 = "abc"
+
+    ["2.3.4"]
+    git-tree-sha1 = "bcd"
+    """
+    assert r._versions() == {"1.2.3": "abc", "2.3.4": "bcd"}
+    r._registry.get_contents.assert_called_with("path/Versions.toml")
+    logger.debug.assert_not_called()
+    commit = Mock()
+    commit.commit.sha = "abcdef"
+    r._registry.get_commits.return_value = [commit]
+    delta = timedelta(days=3)
+    assert r._versions(min_age=delta) == {"1.2.3": "abc", "2.3.4": "bcd"}
+    r._registry.get_commits.assert_called_once()
+    assert len(r._registry.get_commits.mock_calls) == 1
+    [c] = r._registry.get_commits.mock_calls
+    assert not c.args and len(c.kwargs) == 1 and "until" in c.kwargs
+    assert isinstance(c.kwargs["until"], datetime)
+    r._registry.get_contents.assert_called_with("path/Versions.toml", ref="abcdef")
+    logger.debug.assert_not_called()
+    r._registry.get_commits.return_value = []
+    assert r._versions(min_age=delta) == {}
+    logger.debug.assert_called_with("No registry commits were found")
+    r._registry.get_contents.side_effect = UnknownObjectException(404, "???", {})
+    assert r._versions() == {}
+    logger.debug.assert_called_with("Versions.toml was not found ({})")
+    r._Repo__registry_path = Mock(__bool__=lambda self: False)
+    assert r._versions() == {}
+    logger.debug.assert_called_with("Package is not registered")
+
+
+def test_run_url():
+    r = _repo()
+    r._repo = Mock(html_url="https://github.com/Foo/Bar")
+    with patch.dict(os.environ, {"GITHUB_RUN_ID": "123"}):
+        assert r._run_url() == "https://github.com/Foo/Bar/actions/runs/123"
+    with patch.dict(os.environ, clear=True):
+        assert r._run_url() == "https://github.com/Foo/Bar/actions"
+
+
+@patch("tagbot.action.repo.logger")
+@patch("docker.from_env")
+def test_image_id(from_env, logger):
+    r = _repo()
+    from_env.return_value.containers.get.return_value.image.id = "sha"
+    with patch.dict(os.environ, {"HOSTNAME": "foo"}):
+        assert r._image_id() == "sha"
+    with patch.dict(os.environ, clear=True):
+        assert r._image_id() == "Unknown"
+    logger.warning.assert_called_with("HOSTNAME is not set")
+
+
+@patch("requests.post")
+def test_report_error(post):
+    post.return_value.json.return_value = {"status": "ok"}
+    r = _repo(token="x")
+    r._repo = Mock(full_name="Foo/Bar", private=True)
+    r._image_id = Mock(return_value="id")
+    r._run_url = Mock(return_value="url")
+    r._report_error("ahh")
+    post.assert_not_called()
+    r._repo.private = False
+    with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
+        r._report_error("ahh")
+    post.assert_not_called()
+    with patch.dict(os.environ, {}, clear=True):
+        r._report_error("ahh")
+    post.assert_not_called()
+    with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
+        r._report_error("ahh")
+    post.assert_called_with(
+        f"{TAGBOT_WEB}/report",
+        json={"image": "id", "repo": "Foo/Bar", "run": "url", "stacktrace": "ahh"},
+    )
+
+
+def test_is_registered():
+    r = _repo(github="gh.com")
+    r._repo = Mock(full_name="Foo/Bar.jl")
+    r._Repo__registry_path = Mock(__bool__=lambda self: False)
+    r._registry.get_contents = Mock()
+    contents = r._registry.get_contents.return_value
+    contents.decoded_content = b"""repo = "https://gh.com/Foo/Bar.jl.git"\n"""
+    assert not r.is_registered()
+    r._registry.get_contents.assert_not_called()
+    r._Repo__registry_path = "path"
+    assert r.is_registered()
+    r._registry.get_contents.assert_called_with("path/Package.toml")
+    contents.decoded_content = b"""repo = "https://gh.com/Foo/Bar.jl"\n"""
+    assert r.is_registered()
+    contents.decoded_content = b"""repo = "https://gitlab.com/Foo/Bar.jl.git"\n"""
+    assert not r.is_registered()
+    contents.decoded_content = b"""repo = "git@gh.com:Foo/Bar.jl.git"\n"""
+    assert r.is_registered()
+    contents.decoded_content = b"""repo = "git@github.com:Foo/Bar.jl.git"\n"""
+    assert not r.is_registered()
+    # TODO: We should test for the InvalidProject behaviour,
+    # but I'm not really sure how it's possible.
+
+
+def test_new_versions():
+    r = _repo()
+    r._versions = lambda min_age=None: (
+        {"1.2.3": "abc"}
+        if min_age
+        else {"1.2.3": "abc", "3.4.5": "cde", "2.3.4": "bcd"}
+    )
+    r._filter_map_versions = lambda vs: vs
+    assert list(r.new_versions().items()) == [("2.3.4", "bcd"), ("3.4.5", "cde")]
+
+
+def test_create_dispatch_event():
+    r = _repo()
+    r._repo = Mock(full_name="Foo/Bar")
+    r.create_dispatch_event({"a": "b", "c": "d"})
+    r._repo.create_repository_dispatch.assert_called_once_with(
+        "TagBot", {"a": "b", "c": "d"}
+    )
+
+
+@patch("tagbot.action.repo.mkstemp", side_effect=[(0, "abc"), (0, "xyz")] * 3)
+@patch("os.chmod")
+@patch("subprocess.run")
+@patch("pexpect.spawn")
+def test_configure_ssh(spawn, run, chmod, mkstemp):
+    r = _repo(github="gh.com", repo="foo")
+    r._repo = Mock(ssh_url="sshurl")
+    r._git.set_remote_url = Mock()
+    r._git.config = Mock()
+    open = mock_open()
+    with patch("builtins.open", open):
+        r.configure_ssh(" BEGIN OPENSSH PRIVATE KEY ", None)
+    r._git.set_remote_url.assert_called_with("sshurl")
+    open.assert_has_calls([call("abc", "w"), call("xyz", "w")], any_order=True)
+    open.return_value.write.assert_called_with("BEGIN OPENSSH PRIVATE KEY\n")
+    run.assert_called_with(
+        ["ssh-keyscan", "-t", "rsa", "gh.com"],
+        check=True,
+        stdout=open.return_value,
+        stderr=DEVNULL,
+    )
+    chmod.assert_called_with("abc", S_IREAD)
+    r._git.config.assert_called_with(
+        "core.sshCommand", "ssh -i abc -o UserKnownHostsFile=xyz", repo=""
+    )
+    with patch("builtins.open", open):
+        r.configure_ssh("Zm9v", None)
+    open.return_value.write.assert_any_call("foo\n")
+    spawn.assert_not_called()
+    run.return_value.stdout = """
+    VAR1=value; export VAR1;
+    VAR2=123; export VAR2;
+    echo Agent pid 123;
+    """
+    with patch("builtins.open", open):
+        r.configure_ssh("Zm9v", "mypassword")
+    open.return_value.write.assert_called_with("foo\n")
+    run.assert_called_with(["ssh-agent"], check=True, text=True, capture_output=True)
+    assert os.getenv("VAR1") == "value"
+    assert os.getenv("VAR2") == "123"
+    spawn.assert_called_with("ssh-add abc")
+    calls = [
+        call.expect("Enter passphrase"),
+        call.sendline("mypassword"),
+        call.expect("Identity added"),
+    ]
+    spawn.return_value.assert_has_calls(calls)
+
+
+@patch("tagbot.action.repo.GPG")
+@patch("tagbot.action.repo.mkdtemp", return_value="gpgdir")
+@patch("os.chmod")
+def test_configure_gpg(chmod, mkdtemp, GPG):
+    r = _repo()
+    r._git.config = Mock()
+    gpg = GPG.return_value
+    gpg.import_keys.return_value = Mock(sec_imported=1, fingerprints=["k"], stderr="e")
+    r.configure_gpg("BEGIN PGP PRIVATE KEY", None)
+    assert os.getenv("GNUPGHOME") == "gpgdir"
+    chmod.assert_called_with("gpgdir", S_IREAD | S_IWRITE | S_IEXEC)
+    GPG.assert_called_with(gnupghome="gpgdir", use_agent=True)
+    gpg.import_keys.assert_called_with("BEGIN PGP PRIVATE KEY", passphrase=None)
+    calls = [call("tag.gpgSign", "true"), call("user.signingKey", "k")]
+    r._git.config.assert_has_calls(calls)
+    r.configure_gpg("Zm9v", None)
+    gpg.import_keys.assert_called_with("foo", passphrase=None)
+    gpg.sign.return_value = Mock(status="signature created")
+    r.configure_gpg("Zm9v", "mypassword")
+    gpg.sign.assert_called_with("test", passphrase="mypassword")
+    gpg.sign.return_value = Mock(status=None, stderr="e")
+    with pytest.raises(Abort):
+        r.configure_gpg("Zm9v", "mypassword")
+    gpg.import_keys.return_value.sec_imported = 0
+    with pytest.raises(Abort):
+        r.configure_gpg("Zm9v", None)
+
+
+def test_handle_release_branch():
+    r = _repo()
+    r._create_release_branch_pr = Mock()
+    r._git = Mock(
+        fetch_branch=Mock(side_effect=[False, True, True, True, True]),
+        is_merged=Mock(side_effect=[True, False, False, False]),
+        can_fast_forward=Mock(side_effect=[True, False, False]),
+    )
+    r._pr_exists = Mock(side_effect=[True, False])
+    r.handle_release_branch("v1")
+    r._git.fetch_branch.assert_called_with("release-1")
+    r._git.is_merged.assert_not_called()
+    r.handle_release_branch("v2")
+    r._git.is_merged.assert_called_with("release-2")
+    r._git.can_fast_forward.assert_not_called()
+    r.handle_release_branch("v3")
+    r._git.merge_and_delete_branch.assert_called_with("release-3")
+    r._pr_exists.assert_not_called()
+    r.handle_release_branch("v4")
+    r._pr_exists.assert_called_with("release-4")
+    r._create_release_branch_pr.assert_not_called()
+    r.handle_release_branch("v5")
+    r._create_release_branch_pr.assert_called_with("v5", "release-5")
+
+
+def test_handle_release_branch_subdir():
+    r = _repo(subdir="path/to/Foo.jl")
+    r._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "Foo"\nuuid="abc-def"\n""")
+    )
+    r._create_release_branch_pr = Mock()
+    r._git = Mock(
+        fetch_branch=Mock(side_effect=[False, True, True, True, True]),
+        is_merged=Mock(side_effect=[True, False, False, False]),
+        can_fast_forward=Mock(side_effect=[True, False, False]),
+    )
+    r._pr_exists = Mock(side_effect=[True, False])
+    r.handle_release_branch("v1")
+    r._git.fetch_branch.assert_called_with("release-Foo-1")
+    r._git.is_merged.assert_not_called()
+    r.handle_release_branch("v2")
+    r._git.is_merged.assert_called_with("release-Foo-2")
+    r._git.can_fast_forward.assert_not_called()
+    r.handle_release_branch("v3")
+    r._git.merge_and_delete_branch.assert_called_with("release-Foo-3")
+    r._pr_exists.assert_not_called()
+    r.handle_release_branch("v4")
+    r._pr_exists.assert_called_with("release-Foo-4")
+    r._create_release_branch_pr.assert_not_called()
+    r.handle_release_branch("v5")
+    r._create_release_branch_pr.assert_called_with("Foo-v5", "release-Foo-5")
+
+
+def test_create_release():
+    r = _repo(user="user", email="email")
+    r._commit_sha_of_release_branch = Mock(return_value="a")
+    r._git.create_tag = Mock()
+    r._repo = Mock(default_branch="default")
+    r._repo.create_git_tag.return_value.sha = "t"
+    r._changelog.get = Mock(return_value="l")
+    r.create_release("v1", "a")
+    r._git.create_tag.assert_called_with("v1", "a", "l")
+    r._repo.create_git_release.assert_called_with(
+        "v1", "v1", "l", target_commitish="default", draft=False
+    )
+    r.create_release("v1", "b")
+    r._repo.create_git_release.assert_called_with(
+        "v1", "v1", "l", target_commitish="b", draft=False
+    )
+    r.create_release("v1", "c")
+    r._git.create_tag.assert_called_with("v1", "c", "l")
+    r._draft = True
+    r._git.create_tag.reset_mock()
+    r.create_release("v1", "d")
+    r._git.create_tag.assert_not_called()
+    r._repo.create_git_release.assert_called_with(
+        "v1", "v1", "l", target_commitish="d", draft=True
+    )
+
+
+def test_create_release_subdir():
+    r = _repo(user="user", email="email", subdir="path/to/Foo.jl")
+    r._commit_sha_of_release_branch = Mock(return_value="a")
+    r._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "Foo"\nuuid="abc-def"\n""")
+    )
+    assert r._tag_prefix() == "Foo-v"
+    r._git.create_tag = Mock()
+    r._repo = Mock(default_branch="default")
+    r._repo.create_git_tag.return_value.sha = "t"
+    r._changelog.get = Mock(return_value="l")
+    r.create_release("v1", "a")
+    r._git.create_tag.assert_called_with("Foo-v1", "a", "l")
+    r._repo.create_git_release.assert_called_with(
+        "Foo-v1", "Foo-v1", "l", target_commitish="default", draft=False
+    )
+    r.create_release("v1", "b")
+    r._repo.create_git_release.assert_called_with(
+        "Foo-v1", "Foo-v1", "l", target_commitish="b", draft=False
+    )
+    r.create_release("v1", "c")
+    r._git.create_tag.assert_called_with("Foo-v1", "c", "l")
+    r._draft = True
+    r._git.create_tag.reset_mock()
+    r.create_release("v1", "d")
+    r._git.create_tag.assert_not_called()
+    r._repo.create_git_release.assert_called_with(
+        "Foo-v1", "Foo-v1", "l", target_commitish="d", draft=True
+    )
+
+
+@patch("traceback.format_exc", return_value="ahh")
+@patch("tagbot.action.repo.logger")
+def test_handle_error(logger, format_exc):
+    r = _repo()
+    r._report_error = Mock(side_effect=[None, RuntimeError("!")])
+    r.handle_error(RequestException())
+    r._report_error.assert_not_called()
+    r.handle_error(GithubException(502, "oops", {}))
+    r._report_error.assert_not_called()
+    try:
+        r.handle_error(GithubException(404, "???", {}))
+    except Abort:
+        assert True
+    else:
+        assert False
+    r._report_error.assert_called_with("ahh")
+    try:
+        r.handle_error(RuntimeError("?"))
+    except Abort:
+        assert True
+    else:
+        assert False
+    r._report_error.assert_called_with("ahh")
+    logger.error.assert_called_with("Issue reporting failed")
+
+
+def test_commit_sha_of_version():
+    r = _repo()
+    r._Repo__registry_path = ""
+    r._registry.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""["3.4.5"]\ngit-tree-sha1 = "abc"\n""")
+    )
+    r._commit_sha_of_tree = Mock(return_value="def")
+    assert r.commit_sha_of_version("v1.2.3") is None
+    r._registry.get_contents.assert_not_called()
+    r._Repo__registry_path = "path"
+    assert r.commit_sha_of_version("v2.3.4") is None
+    r._registry.get_contents.assert_called_with("path/Versions.toml")
+    r._commit_sha_of_tree.assert_not_called()
+    assert r.commit_sha_of_version("v3.4.5") == "def"
+    r._commit_sha_of_tree.assert_called_with("abc")
+
+
+def test_tag_prefix_and_get_version_tag():
+    r = _repo()
+    r._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r._tag_prefix() == "v"
+    assert r._get_version_tag("v0.1.3") == "v0.1.3"
+    assert r._get_version_tag("0.1.3") == "v0.1.3"
+
+    r = _repo(subdir="")
+    r._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r._tag_prefix() == "v"
+    assert r._get_version_tag("v0.1.3") == "v0.1.3"
+    assert r._get_version_tag("0.1.3") == "v0.1.3"
+
+    r_subdir = _repo(subdir="FooBar")
+    r_subdir._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r_subdir._tag_prefix() == "FooBar-v"
+    assert r_subdir._get_version_tag("v0.1.3") == "FooBar-v0.1.3"
+    assert r_subdir._get_version_tag("0.1.3") == "FooBar-v0.1.3"
+
+    r_subdir = _repo(subdir="FooBar", tag_prefix="NO_PREFIX")
+    r_subdir._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r._tag_prefix() == "v"
+    assert r._get_version_tag("v0.1.3") == "v0.1.3"
+    assert r._get_version_tag("0.1.3") == "v0.1.3"
+
+    r_subdir = _repo(tag_prefix="MyFooBar")
+    r_subdir._repo.get_contents = Mock(
+        return_value=Mock(decoded_content=b"""name = "FooBar"\nuuid="abc-def"\n""")
+    )
+    assert r_subdir._tag_prefix() == "MyFooBar-v"
+    assert r_subdir._get_version_tag("v0.1.3") == "MyFooBar-v0.1.3"
+    assert r_subdir._get_version_tag("0.1.3") == "MyFooBar-v0.1.3"
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/test/web/test_web.py
+```python
+import json
+
+from unittest.mock import Mock, patch
+
+from tagbot import web
+
+
+def test_request_id():
+    with_id = {"context": Mock(aws_request_id="id")}
+    with web.app.test_request_context(environ_base=with_id):
+        assert web._request_id() == "id"
+    with web.app.test_request_context(environ_base={}):
+        assert web._request_id() is None
+    with web.app.test_request_context():
+        assert web._request_id() is None
+
+
+def test_not_found(client):
+    resp = client.get("/abcdef", content_type="application/json")
+    assert resp.status_code == 404
+    assert resp.is_json
+    assert resp.json["error"] == "Not found"
+    resp = client.get("/abcdef")
+    assert resp.status_code == 404
+    assert not resp.is_json
+    assert b"Sorry, this page doesn't exist." in resp.data
+
+
+def test_method_not_allowed(client):
+    resp = client.get("/report")
+    assert resp.status_code == 405
+    assert not resp.is_json
+    assert b"Sorry, this method is not allowed for this URL." in resp.data
+    resp = client.get("/report", content_type="application/json")
+    assert resp.status_code == 405
+    assert resp.is_json
+    assert resp.json["error"] == "Method not allowed"
+
+
+@patch("tagbot.web.TAGBOT_REPO_NAME", __str__=lambda x: "Foo/Bar")
+@patch("tagbot.web._request_id", return_value=None)
+@patch("tagbot.web.after_request", lambda r: r)
+def test_error(request_id, repo_name, client):
+    resp = client.get("/die")
+    assert resp.status_code == 500
+    assert not resp.is_json
+    assert b"Sorry, there has been an internal server error." in resp.data
+    assert b"https://github.com/Foo/Bar/issues" in resp.data
+    assert b"Include the following error ID:" not in resp.data
+    request_id.return_value = "id"
+    resp = client.get("/die", content_type="application/json")
+    assert resp.status_code == 500
+    assert resp.is_json
+    assert resp.json["error"] == "Internal server error"
+    assert resp.json["request_id"] == "id"
+
+
+def test_index(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Home" in resp.data
+
+
+@patch("tagbot.web.REPORTS_FUNCTION_NAME")
+@patch("tagbot.web.LAMBDA")
+def test_report(LAMBDA, REPORTS, client):
+    payload = {"image": "img", "repo": "repo", "run": "123", "stacktrace": "ow"}
+    resp = client.post("/report", json=payload)
+    assert resp.status_code == 200
+    assert resp.is_json
+    assert resp.json == {"status": "Submitted error report"}
+    LAMBDA.invoke.assert_called_with(FunctionName=REPORTS, Payload=json.dumps(payload))
+
+```
+
+/home/shrikara/Downloads/JuliaRegistries_TagBot/test/web/conftest.py
+```python
+import pytest
+
+from tagbot.web import app
+
+
+@pytest.fixture
+def client():
+    with app.test_client() as client:
+        yield client
+
+
+@app.route("/die")
+def die():
+    raise Exception("!")
+
+```
