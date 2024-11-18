@@ -1,6 +1,16 @@
 from codebleu import calc_codebleu # type: ignore
 
 def read_file(file_path):
+    """
+    Read the file given the path
+
+    Args:
+        file_path: Path to the file
+
+    Returns:
+        str: The content of the file
+    """
+
     try:
         with open(f"{file_path}", "r") as f:
             return f.read()
@@ -9,6 +19,16 @@ def read_file(file_path):
         exit()
 
 def codebleu_score_calculator(original_function_file_path: str, generated_function_file_path: str, language: str):
+    """
+    Calculate the CodeBLEU score for generated function wrt the original function
+
+    Args:
+        original_function_file_path: Path to the original function
+        generated_function_file_path: Path to the generated function
+    
+    Returns:
+        dict: The CodeBLEU scores
+    """
 
     original_function = read_file(original_function_file_path)
     generated_function = read_file(generated_function_file_path)
@@ -18,6 +38,15 @@ def codebleu_score_calculator(original_function_file_path: str, generated_functi
     return result
 
 def avg_codebleu_score_calculator(codebeu_scores: list):
+    """
+    Get the avg. CodeBLEu scores given a dictionary of scores
+
+    Args:
+        codebeu_scores: List of dictionaries containing the CodeBLEU scores
+
+    Returns:
+        dict: The average CodeBLEU scores
+    """
 
     average_result = {key: 0 for key in codebeu_scores[0]}
 

@@ -1,6 +1,11 @@
 import {readFileSync, existsSync} from 'fs';
 import escomplex from 'typhonjs-escomplex';
 
+/**
+ * Calculate the cyclomatic complexity of a given file.
+ * @param {string} path_to_file - The path to the file.
+ * @returns {number} The cyclomatic complexity of the file.
+ */
 function calc_cyclomatic_complexity(path_to_file) {
     if (!existsSync(path_to_file)) {
         return -1;

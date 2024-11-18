@@ -1,29 +1,12 @@
-# %% [markdown]
-# # Imports and helpers
-
-# %%
-from pygount import SourceAnalysis
-import os
 import json
-import shutil
-from dotenv import load_dotenv
-from complexipy import file_complexity
-from tqdm.notebook import tqdm
-import numpy as np
-import pandas as pd
-from radon.complexity import cc_visit
-import subprocess
-import re
-import radon
-import radon.metrics
 
-
-# %%
-load_dotenv()
-
-
-# %%
 def validate_config(config: dict):
+    """
+    Validate the config file for the experiment
+
+    Args:
+        config (dict): The experiment config
+    """
     required_keys = [
     "language", "summarize_codebase", "codebase_readme_path", "files_to_summarize_paths", "codebase_summary_prompt_template", "codebase_summary_prompt_save_path", "codebase_summary_save_path", "function_description_prompt_template", "function_description_prompt_save_path", "function_description_save_path",  "function_generation_prompt_template_type1", "function_generation_prompt_type1_save_path", "function_generation_prompt_template_type2", "function_generation_prompt_type2_save_path", "function_generation_prompt_template_type3", "function_generation_prompt_type3_save_path", "chosen_function_path", "chosen_function", "original_function_save_path", "example_function_description1", "example_function_code1", "example_function_description2", "example_function_code2", "generated_function_type1_save_dir", "generated_function_type2_save_dir", "generated_function_type3_save_dir", "run_codebleu", "codebleu_type1_save_dir", "codebleu_type2_save_dir", "codebleu_type3_save_dir"     
     ]
@@ -32,20 +15,16 @@ def validate_config(config: dict):
         if key not in config:
             raise ValueError(f"Missing required key: {key}")
 
-
-# %%
-model_names = [
-    "GPT-3_5-Turbo", 
-    "GPT-4", 
-    "DeepSeek-Coder-V2", 
-    "CodeQwen1_5-7B-Chat", 
-    "Artigenz-Coder-DS-6_7B"
-]
-type_names = ["type1", "type2", "type3"]
-
-
-# %%
 def read_config_files_index(file_index_path: str):
+    """
+    Read the config files index
+
+    Args:
+        file_index_path (str): The path to the file index
+
+    Returns:
+        list: List of config files
+    """
     with open(file_index_path, 'r') as f:
         remaining_confs_paths = f.read().splitlines()
 
@@ -60,9 +39,16 @@ def read_config_files_index(file_index_path: str):
     
     return remaining_confs
 
-
-# %%
 def load_func_generation_prompts(config):
+    """
+    Load the function generation prompts
+
+    Args:
+        config (dict): The experiment config
+
+    Returns:
+        tuple: The function generation prompts
+    """
     with open(config['function_generation_prompt_type1_save_path'], 'r') as f:
         function_generation_prompt_type1 = f.read()
     
@@ -77,98 +63,6 @@ def load_func_generation_prompts(config):
     return function_generation_prompt_type1, function_generation_prompt_type2, function_generation_prompt_type3
 
 
-# %%
-def get_loc(filepath: str):
-    analysis = SourceAnalysis.from_file(filepath, "pygount")
-    return analysis.code
-
-
-# %%
-def get_cog_complexity_py(filepath: str):
-    fc = file_complexity(filepath)
-    return fc.complexity
-
-
-# %%
-def get_cog_complexity_js(js_file):
-    try:
-        result = subprocess.run(
-            ['npx', 'ccts-json', js_file],
-            capture_output=True, check=True
-        )
-        text = result.stdout.decode('utf-8').strip()
-        cleaned_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        json_res = json.loads(cleaned_text)
-
-        cog_complexity = next(iter(json_res.values()))['score'] # get the score from the first value in the json
-        return cog_complexity
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error running js cyclomatic complexity calculator: {e}")
-        return None
-
-
-# %%
-def get_cc_py(python_file_path: str):
-    with open(python_file_path, 'r') as f:
-        code = f.read()
-
-    complexity_list = cc_visit(code)
-    cc = sum(comp.complexity for comp in complexity_list)
-    return cc
-
-
-# %%
-def get_cc_js(js_file):
-    try:
-        result = subprocess.run(
-            ['node', 'js_code_metrics.js', js_file],
-            capture_output=True, check=True
-        )
-        text = result.stdout.decode('utf-8').strip()
-        cleaned_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        complexity = int(cleaned_text.split()[-1])
-        return complexity
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error running js cyclomatic complexity calculator: {e}")
-        return None
-
-
-# %%
-def get_halstead_py(filepath: str):
-    with open(filepath, 'r') as f:
-        code = f.read()
-
-    halstead_res = radon.metrics.h_visit(code)
-    return halstead_res.total.volume
-
-
-# %%
-def get_halstead_js(js_file):
-    try:
-        result = subprocess.run(
-            ['node', 'js_halstead.js', js_file],
-            capture_output=True, check=True
-        )
-        text = result.stdout.decode('utf-8').strip()
-        cleaned_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        halstead = float(cleaned_text.split()[-1])
-        return halstead
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error running js cyclomatic complexity calculator: {e}")
-        return None
-
-
-# %%
-def get_name(config):
-    # return "/".join(config['original_function_save_path'].split('/')[:-1])
-    repo, func = config['original_function_save_path'].split('/')[:-1]
-    return repo, func[-1]
-
-
-# %%
 def get_function_paths(config:dict, model_name: str, prompt_type: str, generation_num: int=1):
     """Get the path to original code and generated code for a specific model and prompt type.
 
@@ -191,3 +85,12 @@ def get_function_paths(config:dict, model_name: str, prompt_type: str, generatio
 
     return {"original": original_function_save_path, "generated": generated_function_save_path}
 
+def get_name(config):
+    """
+    Get the name of the function from the path
+    
+    Args:
+        config (dict): The experiment config
+    """
+    repo, func = config['original_function_save_path'].split('/')[:-1]
+    return repo, func[-1]
