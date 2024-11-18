@@ -8,7 +8,7 @@ You are a computer scientist specializing in serverless computing (especially Fa
 
 Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/calculate-total-order.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/calculate-total-order.js
 ```JS
 // @ts-check
 const laconiaBatch = require("@laconia/batch");
@@ -42,7 +42,7 @@ exports.handler = laconiaBatch(
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/S3TotalOrderStorage.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/S3TotalOrderStorage.js
 ```JS
 const pWaitFor = require("p-wait-for");
 
@@ -123,7 +123,7 @@ module.exports = class S3TotalOrderStorage {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/update-user-receipt.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/update-user-receipt.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -151,7 +151,7 @@ exports.handler = laconia(webSocket(app)).register(instances, {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/notify-user.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/notify-user.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -178,7 +178,7 @@ exports.handler = laconia(kinesis(app));
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/download-image.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/download-image.js
 ```JS
 const fs = require("fs");
 const laconia = require("@laconia/core");
@@ -197,7 +197,7 @@ exports.handler = laconia(apigateway(exports.app));
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/convert-total-order-to-xml.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/convert-total-order-to-xml.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -218,7 +218,7 @@ exports.handler = laconia(s3(app)).register(
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/KinesisOrderStream.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/KinesisOrderStream.js
 ```JS
 const AWS = require("aws-sdk");
 
@@ -242,7 +242,7 @@ module.exports = class KinesisOrderStream {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/SnsRestaurantNotificationTopic.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/SnsRestaurantNotificationTopic.js
 ```JS
 module.exports = class SnsRestaurantNotificationTopic {
   constructor(sns, snsArn) {
@@ -261,7 +261,7 @@ module.exports = class SnsRestaurantNotificationTopic {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/DynamoDbWebSocketServer.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/DynamoDbWebSocketServer.js
 ```JS
 const AWS = require("aws-sdk");
 const WebSocketClient = require("./WebSocketClient");
@@ -309,7 +309,7 @@ module.exports = class DynamoDbWebSocketServer {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/capture-card-payment.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/capture-card-payment.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -325,7 +325,7 @@ exports.handler = laconia(spy(exports.app)).register(spy.instances());
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/ValidationError.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/ValidationError.js
 ```JS
 module.exports = class ValidationError extends Error {
   constructor(message) {
@@ -336,7 +336,7 @@ module.exports = class ValidationError extends Error {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/fake-restaurant.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/fake-restaurant.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -363,7 +363,7 @@ exports.handler = laconia(sns(app));
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/update-user.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/update-user.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -386,7 +386,7 @@ exports.handler = laconia(kinesis(app)).register(() => ({
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/send-email.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/send-email.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -401,7 +401,7 @@ exports.handler = laconia(sqs(spy(app))).register(spy.instances());
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/place-order.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/place-order.js
 ```JS
 // @ts-check
 const lambdaWarmer = require("@laconia/middleware-lambda-warmer")();
@@ -482,7 +482,7 @@ exports.handler = lambdaWarmer(handler);
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/UuidIdGenerator.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/UuidIdGenerator.js
 ```JS
 const uuidv4 = require("uuid/v4");
 
@@ -494,7 +494,7 @@ module.exports = class UuidIdGenerator {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/disconnect-websocket.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/disconnect-websocket.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -517,7 +517,7 @@ exports.handler = laconia(adapter(app)).register(
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/sts.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/sts.js
 ```JS
 const { STS } = require("aws-sdk");
 const sts = new STS();
@@ -529,7 +529,7 @@ exports.getAccountId = async () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/connect-websocket.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/connect-websocket.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -552,7 +552,7 @@ exports.handler = laconia(adapter(app)).register(
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/DynamoDbOrderRepository.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/DynamoDbOrderRepository.js
 ```JS
 const AWS = require("aws-sdk");
 
@@ -600,7 +600,7 @@ module.exports = class DynamoDbOrderRepository {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/notify-restaurant.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/notify-restaurant.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -631,7 +631,7 @@ exports.handler = laconia(adapter(app)).register(
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/WebSocketClient.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/WebSocketClient.js
 ```JS
 const AWS = require("aws-sdk");
 
@@ -661,7 +661,7 @@ module.exports = class WebSocketClient {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/accept-order.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-acceptance-test/src/accept-order.js
 ```JS
 // @ts-check
 const laconia = require("@laconia/core");
@@ -698,7 +698,7 @@ exports.handler = laconia(adapter(app)).register(instances);
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3StreamInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3StreamInputConverter.js
 ```JS
 const { s3 } = require("@laconia/event");
 
@@ -715,7 +715,7 @@ module.exports = class S3StreamInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/DynamoDbStreamJsonInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/DynamoDbStreamJsonInputConverter.js
 ```JS
 const { dynamodb } = require("@laconia/event");
 
@@ -727,7 +727,7 @@ module.exports = class DynamoDbStreamJsonInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/createS3EventAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/createS3EventAdapter.js
 ```JS
 const S3EventAdapter = require("./S3EventAdapter");
 const S3JsonInputConverter = require("./S3JsonInputConverter");
@@ -755,7 +755,7 @@ module.exports = createS3Adapter;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/createEventAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/createEventAdapter.js
 ```JS
 const EventAdapter = require("./EventAdapter");
 
@@ -770,7 +770,7 @@ module.exports = createEventAdapter;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3JsonInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3JsonInputConverter.js
 ```JS
 const { s3 } = require("@laconia/event");
 
@@ -787,7 +787,7 @@ module.exports = class S3JsonInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/EventAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/EventAdapter.js
 ```JS
 module.exports = class EventAdapter {
   constructor(app, inputConverter) {
@@ -807,7 +807,7 @@ module.exports = class EventAdapter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3EventAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/S3EventAdapter.js
 ```JS
 const EventAdapter = require("./EventAdapter");
 
@@ -820,7 +820,7 @@ module.exports = class S3EventAdapter extends EventAdapter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/SqsJsonInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/SqsJsonInputConverter.js
 ```JS
 const { sqs } = require("@laconia/event");
 
@@ -832,7 +832,7 @@ module.exports = class SnsJsonInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/SnsJsonInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/SnsJsonInputConverter.js
 ```JS
 const { sns } = require("@laconia/event");
 
@@ -844,7 +844,7 @@ module.exports = class SnsJsonInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/KinesisJsonInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/KinesisJsonInputConverter.js
 ```JS
 const { kinesis } = require("@laconia/event");
 
@@ -856,7 +856,7 @@ module.exports = class KinesisJsonInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter/src/index.js
 ```JS
 const KinesisJsonInputConverter = require("./KinesisJsonInputConverter");
 const DynamoDbStreamJsonInputConverter = require("./DynamoDbStreamJsonInputConverter");
@@ -874,7 +874,7 @@ exports.s3 = createS3EventAdapter;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayNameMappingErrorConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayNameMappingErrorConverter.js
 ```JS
 const { res } = require("@laconia/event").apigateway;
 
@@ -912,7 +912,7 @@ module.exports = class ApiGatewayNameMappingErrorConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayEventAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayEventAdapter.js
 ```JS
 module.exports = class ApiGatewayEventAdapter {
   constructor(
@@ -948,7 +948,7 @@ module.exports = class ApiGatewayEventAdapter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayParamsInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayParamsInputConverter.js
 ```JS
 const { req } = require("@laconia/event").apigateway;
 
@@ -967,7 +967,7 @@ module.exports = class ApiGatewayParamsInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/createApiGatewayAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/createApiGatewayAdapter.js
 ```JS
 const ApiGatewayEventAdapter = require("./ApiGatewayEventAdapter");
 const ApiGatewayBodyInputConverter = require("./ApiGatewayBodyInputConverter");
@@ -1012,7 +1012,7 @@ module.exports = createApiAgatewayAdapter;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayOutputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayOutputConverter.js
 ```JS
 const { res } = require("@laconia/event").apigateway;
 
@@ -1029,7 +1029,7 @@ module.exports = class ApiGatewayOutputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/createWebSocketAdapter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/createWebSocketAdapter.js
 ```JS
 const { res, parseWebSocket } = require("@laconia/event").apigateway;
 
@@ -1047,7 +1047,7 @@ module.exports = createWebSocketAdapter;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayBodyInputConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/ApiGatewayBodyInputConverter.js
 ```JS
 const { req } = require("@laconia/event").apigateway;
 
@@ -1067,7 +1067,7 @@ module.exports = class ApiGatewayBodyInputConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-adapter-api/src/index.js
 ```JS
 const createApiGatewayAdapter = require("./createApiGatewayAdapter");
 const createWebSocketAdapter = require("./createWebSocketAdapter");
@@ -1077,7 +1077,7 @@ exports.webSocket = createWebSocketAdapter;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/laconiaBatch.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/laconiaBatch.js
 ```JS
 const laconia = require("@laconia/core");
 const BatchProcessor = require("./BatchProcessor");
@@ -1124,7 +1124,7 @@ module.exports = (
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/BatchProcessor.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/BatchProcessor.js
 ```JS
 const EventEmitter = require("events");
 const Bottleneck = require("bottleneck");
@@ -1172,7 +1172,7 @@ module.exports = class BatchProcessor extends EventEmitter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/s3.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/s3.js
 ```JS
 const AWS = require("aws-sdk");
 const S3ItemReader = require("./S3ItemReader");
@@ -1182,7 +1182,7 @@ module.exports = ({ path, s3Params, s3 = new AWS.S3() }) =>
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/recurse.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/recurse.js
 ```JS
 const invoker = require("@laconia/invoker");
 const isplainobject = require("lodash.isplainobject");
@@ -1199,7 +1199,7 @@ module.exports = ({ event, context, $lambda }) => (payload = {}) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/DynamoDbItemReader.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/DynamoDbItemReader.js
 ```JS
 const assert = require("assert");
 
@@ -1293,7 +1293,7 @@ module.exports = class DynamoDbItemReader {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/S3ItemReader.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/S3ItemReader.js
 ```JS
 const get = require("lodash.get");
 const _ = { get };
@@ -1359,7 +1359,7 @@ module.exports = class S3ItemReader {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/dynamoDb.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/dynamoDb.js
 ```JS
 const AWS = require("aws-sdk");
 const DynamoDbItemReader = require("./DynamoDbItemReader");
@@ -1372,7 +1372,7 @@ module.exports = ({
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-batch/src/index.js
 ```JS
 const laconiaBatch = require("./laconiaBatch");
 const s3 = require("./s3");
@@ -1386,7 +1386,7 @@ exports.dynamoDb = dynamoDb;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/SsmConfigConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/SsmConfigConverter.js
 ```JS
 const validateSsmData = data => {
   if (data.InvalidParameters.length > 0) {
@@ -1424,7 +1424,7 @@ module.exports = class SsmConfigConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/S3ConfigConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/S3ConfigConverter.js
 ```JS
 const createS3Params = objectPath => {
   const splitPath = objectPath.split("/");
@@ -1478,7 +1478,7 @@ module.exports = class S3ConfigConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/SecretsManagerConfigConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/SecretsManagerConfigConverter.js
 ```JS
 module.exports = class SecretsManagerConfigConverter {
   constructor(secretsManager) {
@@ -1526,7 +1526,7 @@ module.exports = class SecretsManagerConfigConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/BooleanConfigConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/BooleanConfigConverter.js
 ```JS
 const convertToBoolean = value => {
   const falsyValues = ["false", "null", "undefined", "0", "", "no", "n", "off"];
@@ -1544,7 +1544,7 @@ module.exports = class BooleanConfigConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/IntegerConfigConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/IntegerConfigConverter.js
 ```JS
 const integerRegex = /[^0-9-]/g;
 
@@ -1570,7 +1570,7 @@ module.exports = class IntegerConfigConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/EnvVarConfigFactory.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/EnvVarConfigFactory.js
 ```JS
 const { EnvVarInstanceFactory } = require("@laconia/core");
 
@@ -1617,7 +1617,7 @@ module.exports = class EnvVarConfigFactory extends EnvVarInstanceFactory {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/index.js
 ```JS
 const EnvVarConfigFactory = require("./EnvVarConfigFactory");
 const BooleanConfigConverter = require("./BooleanConfigConverter");
@@ -1639,7 +1639,7 @@ exports.envVarInstances = () => ({ env, $ssm, $s3, $secretsManager }) =>
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/FloatConfigConverter.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-config/src/FloatConfigConverter.js
 ```JS
 const floatRegex = /[^0-9.-]/g;
 
@@ -1665,7 +1665,7 @@ module.exports = class FloatConfigConverter {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/CoreLaconiaContext.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/CoreLaconiaContext.js
 ```JS
 const LaconiaContext = require("./LaconiaContext");
 const SingleCache = require("./SingleCache");
@@ -1697,7 +1697,7 @@ module.exports = class CoreLaconiaContext extends LaconiaContext {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/laconia.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/laconia.js
 ```JS
 const AWS = require("aws-sdk");
 const CoreLaconiaContext = require("./CoreLaconiaContext");
@@ -1781,7 +1781,7 @@ module.exports = app => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/EnvVarInstanceFactory.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/EnvVarInstanceFactory.js
 ```JS
 const macroCaseToCamelCase = str =>
   str.toLowerCase().replace(/_([a-z])/g, g => g[1].toUpperCase());
@@ -1826,7 +1826,7 @@ module.exports = class EnvVarInstanceFactory {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/LaconiaContext.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/LaconiaContext.js
 ```JS
 const prefixKeys = (prefix, object) => {
   const keyValues = Object.keys(object).map(key => {
@@ -1927,7 +1927,7 @@ module.exports = class LaconiaContext {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/SingleCache.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/SingleCache.js
 ```JS
 module.exports = class SingleCache {
   constructor(maxAge) {
@@ -1954,7 +1954,7 @@ module.exports = class SingleCache {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-core/src/index.js
 ```JS
 const laconia = require("./laconia");
 const LaconiaContext = require("./LaconiaContext");
@@ -1968,7 +1968,7 @@ exports.EnvVarInstanceFactory = EnvVarInstanceFactory;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/DynamoDbStreamRecord.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/DynamoDbStreamRecord.js
 ```JS
 const AWS = require("aws-sdk");
 
@@ -1992,7 +1992,7 @@ module.exports = class DynamoDbStreamRecord {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/tryParseJson.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/tryParseJson.js
 ```JS
 module.exports = object => {
   try {
@@ -2004,7 +2004,7 @@ module.exports = object => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SqsEvent.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SqsEvent.js
 ```JS
 const SqsRecord = require("./SqsRecord");
 
@@ -2020,7 +2020,7 @@ module.exports = class SqsEvent {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/DynamoDbStreamEvent.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/DynamoDbStreamEvent.js
 ```JS
 const DynamoDbStreamRecord = require("./DynamoDbStreamRecord");
 
@@ -2038,7 +2038,7 @@ module.exports = class DynamoDbStreamEvent {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/KinesisEvent.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/KinesisEvent.js
 ```JS
 const KinesisRecord = require("./KinesisRecord");
 
@@ -2054,7 +2054,7 @@ module.exports = class KinesisEvent {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SqsRecord.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SqsRecord.js
 ```JS
 const tryParseJson = require("./tryParseJson");
 
@@ -2072,7 +2072,7 @@ module.exports = class SqsRecord {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/KinesisRecord.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/KinesisRecord.js
 ```JS
 module.exports = class KinesisRecord {
   constructor(data) {
@@ -2094,7 +2094,7 @@ module.exports = class KinesisRecord {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/S3Event.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/S3Event.js
 ```JS
 const AWS = require("aws-sdk");
 
@@ -2137,7 +2137,7 @@ module.exports = class S3Event {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/index.js
 ```JS
 const S3Event = require("./S3Event");
 const SqsEvent = require("./SqsEvent");
@@ -2161,7 +2161,7 @@ exports.apigateway = {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SnsEvent.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/SnsEvent.js
 ```JS
 const tryParseJson = require("./tryParseJson");
 
@@ -2179,7 +2179,7 @@ module.exports = class SnsEvent {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/parseRequestBody.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/parseRequestBody.js
 ```JS
 const querystring = require("querystring");
 const getBody = require("./getBody");
@@ -2207,7 +2207,7 @@ module.exports = (event, headers) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayInputHeaders.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayInputHeaders.js
 ```JS
 module.exports = class ApiGatewayInputHeaders {
   constructor(eventHeaders) {
@@ -2231,7 +2231,7 @@ module.exports = class ApiGatewayInputHeaders {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/parseWebSocket.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/parseWebSocket.js
 ```JS
 const getBody = require("./getBody");
 const tryParseJson = require("../tryParseJson");
@@ -2243,7 +2243,7 @@ module.exports = event => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayResponse.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayResponse.js
 ```JS
 const getResponseProps = require("./getResponseProps");
 
@@ -2261,14 +2261,14 @@ module.exports = class ApiGatewayResponse {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getBody.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getBody.js
 ```JS
 module.exports = event =>
   Buffer.from(event.body, event.isBase64Encoded ? "base64" : "utf8").toString();
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayEvent.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayEvent.js
 ```JS
 const parseRequestBody = require("./parseRequestBody");
 const ApiGatewayInputHeaders = require("./ApiGatewayInputHeaders");
@@ -2292,7 +2292,7 @@ module.exports = class ApiGatewayEvent {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getContentType.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getContentType.js
 ```JS
 const getResponseProps = require("./getResponseProps");
 
@@ -2303,7 +2303,7 @@ module.exports = body => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayWebSocketEvent.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/ApiGatewayWebSocketEvent.js
 ```JS
 const parseWebSocket = require("./parseWebSocket");
 
@@ -2323,7 +2323,7 @@ module.exports = class ApiGatewayWebSocketEvent {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getResponseProps.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-event/src/apigateway/getResponseProps.js
 ```JS
 const types = [
   [
@@ -2365,7 +2365,7 @@ module.exports = body => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/invoker.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/invoker.js
 ```JS
 const LambdaInvoker = require("./LambdaInvoker");
 
@@ -2375,7 +2375,7 @@ module.exports = (functionName, lambda, { requestLogs = false } = {}) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/UnhandledInvokeLaconiaError.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/UnhandledInvokeLaconiaError.js
 ```JS
 const UnhandledInvokeLaconiaError = class UnhandledInvokeLaconiaError extends Error {
   constructor(functionName, lambdaErrorPayload) {
@@ -2389,7 +2389,7 @@ module.exports = UnhandledInvokeLaconiaError;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/index.js
 ```JS
 const invoker = require("./invoker");
 const HandledInvokeLaconiaError = require("./HandledInvokeLaconiaError");
@@ -2406,7 +2406,7 @@ exports.envVarInstances = () => ({ env, $lambda }) =>
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/HandledInvokeLaconiaError.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/HandledInvokeLaconiaError.js
 ```JS
 const overrideStack = (err, overrideFn) => {
   Object.defineProperty(err, "stack", {
@@ -2445,7 +2445,7 @@ module.exports = HandledInvokeLaconiaError;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/LambdaInvoker.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/LambdaInvoker.js
 ```JS
 const HandledInvokeLaconiaError = require("./HandledInvokeLaconiaError");
 const UnhandledInvokeLaconiaError = require("./UnhandledInvokeLaconiaError");
@@ -2526,7 +2526,7 @@ module.exports = class LambdaInvoker {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/EnvVarInvokerFactory.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-invoker/src/EnvVarInvokerFactory.js
 ```JS
 const { EnvVarInstanceFactory } = require("@laconia/core");
 const invoker = require("./invoker");
@@ -2544,7 +2544,7 @@ module.exports = class EnvVarInvokerFactory extends EnvVarInstanceFactory {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-middleware-lambda-warmer/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-middleware-lambda-warmer/src/index.js
 ```JS
 const warmer = require("lambda-warmer");
 
@@ -2560,7 +2560,7 @@ module.exports = () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-middleware-serverless-plugin-warmup/src/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/laconiajs_laconia/packages/laconia-middleware-serverless-plugin-warmup/src/index.js
 ```JS
 module.exports = () => {
   return next => {

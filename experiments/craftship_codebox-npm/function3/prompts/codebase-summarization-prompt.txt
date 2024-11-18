@@ -8,7 +8,7 @@ You are a computer scientist specializing in serverless computing (especially Fa
 
 Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/whoami/get.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/whoami/get.js
 ```JS
 export default async ({ requestContext }, _, callback) =>
   callback(null, {
@@ -21,7 +21,7 @@ export default async ({ requestContext }, _, callback) =>
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/s3.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/s3.js
 ```JS
 import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
 
@@ -55,7 +55,7 @@ export default class Storage {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/logger.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/logger.js
 ```JS
 import fetch from 'node-fetch';
 
@@ -111,7 +111,7 @@ export default class Logger {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/npm.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/adapters/npm.js
 ```JS
 import fetch from 'node-fetch';
 
@@ -142,7 +142,7 @@ export default {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/.serverless_plugins/codebox-tools/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/.serverless_plugins/codebox-tools/index.js
 ```JS
 const fetch = require('node-fetch');
 
@@ -438,7 +438,7 @@ module.exports = CodeboxTools;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/.serverless_plugins/remove-storage/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/.serverless_plugins/remove-storage/index.js
 ```JS
 class RemoveStorageBucket {
   constructor(serverless) {
@@ -531,7 +531,7 @@ module.exports = RemoveStorageBucket;
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/tar/get.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/tar/get.js
 ```JS
 import npm from '../adapters/npm';
 import S3 from '../adapters/s3';
@@ -564,7 +564,7 @@ export default async (event, context, callback) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/authorizers/github.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/authorizers/github.js
 ```JS
 import url from 'url';
 import GitHub from '@octokit/rest';
@@ -710,7 +710,7 @@ export default async ({ methodArn, authorizationToken }, context, callback) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/delete.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/delete.js
 ```JS
 import S3 from '../adapters/s3';
 import Logger from '../adapters/logger';
@@ -768,7 +768,7 @@ export default async ({
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/get.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/get.js
 ```JS
 import npm from '../adapters/npm';
 import S3 from '../adapters/s3';
@@ -828,7 +828,7 @@ export default async ({
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/get/lib.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/get/lib.js
 ```JS
 export default async ({ pathParameters }, {
   registry,
@@ -898,7 +898,7 @@ export default async ({ pathParameters }, {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/get/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/get/index.js
 ```JS
 import lib from './lib';
 import contextFactory from '../contextFactory';
@@ -916,7 +916,7 @@ export default async (event, _, callback) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/user/delete.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/user/delete.js
 ```JS
 import url from 'url';
 import GitHub from '@octokit/rest';
@@ -964,7 +964,7 @@ export default async ({ pathParameters }, context, callback) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/user/put.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/user/put.js
 ```JS
 import url from 'url';
 import GitHub from '@octokit/rest';
@@ -1049,7 +1049,7 @@ export default async ({ body }, context, callback) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/publish.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/publish.js
 ```JS
 export default async ({
   requestContext,
@@ -1175,7 +1175,7 @@ export default async ({
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/deprecate.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/deprecate.js
 ```JS
 export default async ({
   requestContext,
@@ -1217,7 +1217,7 @@ export default async ({
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/index.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/put/index.js
 ```JS
 import deprecate from './deprecate';
 import publish from './publish';
@@ -1246,7 +1246,7 @@ export default async (event, _, callback) => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/whoami/get.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/whoami/get.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import subject from '../../src/whoami/get';
@@ -1283,7 +1283,7 @@ describe('GET /registry/-/whoami', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/npm.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/npm.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import subject from '../../src/adapters/npm';
@@ -1408,7 +1408,7 @@ describe('NPM', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/logger.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/logger.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import Subject from '../../src/adapters/logger';
@@ -1482,7 +1482,7 @@ describe('Logger', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/s3.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/adapters/s3.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
@@ -1553,7 +1553,7 @@ describe('S3', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/serverless_plugins/remove-storage/index.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/serverless_plugins/remove-storage/index.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
@@ -1784,7 +1784,7 @@ describe('Plugin: RemoveStorageBucket', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/serverless_plugins/codebox-tools/index.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/serverless_plugins/codebox-tools/index.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import AWS from 'aws-sdk'; // eslint-disable-line import/no-extraneous-dependencies
@@ -2196,7 +2196,7 @@ describe('Plugin: CodeboxTools', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/tar/get.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/tar/get.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import Storage from '../../src/adapters/s3';
@@ -2360,7 +2360,7 @@ describe('GET /registry/{name}/-/{tar}', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/authorizers/github.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/authorizers/github.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import GitHub from '@octokit/rest';
@@ -2861,7 +2861,7 @@ describe('GitHub Authorizer', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/get.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/get.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import Storage from '../../src/adapters/s3';
@@ -3085,7 +3085,7 @@ describe('GET /registry/-/package/{name}/dist-tags', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/delete.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/dist-tags/delete.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import Storage from '../../src/adapters/s3';
@@ -3233,7 +3233,7 @@ describe('DELETE registry/-/package/{name}/dist-tags/{tag}', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/get/lib.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/get/lib.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import pkg from '../fixtures/package';
@@ -3447,7 +3447,7 @@ describe('GET /registry/{name}', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/user/delete.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/user/delete.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import GitHub from '@octokit/rest';
@@ -3592,7 +3592,7 @@ describe('DELETE /registry/-/user/token/{token}', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/user/put.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/user/put.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import GitHub from '@octokit/rest';
@@ -3852,7 +3852,7 @@ describe('PUT /registry/-/user/{id}', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/put/deprecate.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/put/deprecate.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import pkg from '../fixtures/package';
@@ -3995,7 +3995,7 @@ describe('PUT /registry/{name}', () => {
 
 ```
 
-/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/put/publish.test.js
+/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/test/put/publish.test.js
 ```JS
 /* eslint-disable no-underscore-dangle */
 import pkg from '../fixtures/package';

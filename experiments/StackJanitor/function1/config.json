@@ -22,7 +22,7 @@
     "function_generation_prompt_template_type3": "prompt-templates/function-generation-prompt-template/type3.txt",
     "function_generation_prompt_type3_save_path": "StackJanitor/function1/prompts/function-generation-prompt/type3.txt",
         
-    "chosen_function_path": "/home/shrikara/Downloads/StackJanitor/src/optional-handlers/searchDeleteCloudformationStack.ts",
+    "chosen_function_path": "/home/userName/Downloads/StackJanitor/src/optional-handlers/searchDeleteCloudformationStack.ts",
     "chosen_function": "searchDeleteCloudformationStack.ts",
     "original_function_save_path": "StackJanitor/function1/ORIGINAL-searchDeleteCloudformationStack.ts",
     

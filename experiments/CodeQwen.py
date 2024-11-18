@@ -7,7 +7,7 @@ class CodeQwen(LLMInterface):
         """
         Initialize the CodeQwen model.
         """
-        self.model = Client("sudokara/CodeQwen1.5-7B-Chat")
+        self.model = Client("userName/CodeQwen1.5-7B-Chat")
 
     def generate(self, prompt:str, *args, **kwargs) -> str:
         """

@@ -1,7 +1,5 @@
 # LLMs for Generation of Architectural Components: An Exploratory Empirical Study in the Serverless World
 
-### Shrikara Arun, Meghana Tedla, Karthik Vaidhyanathan
-----
 This repository contains the experiments for our submission to ICSA25. 
 
 This project explores the capabilities of Large Language Models (LLMs) to generate architectural components, focusing on Functions as a Service (FaaS), commonly known as serverless functions. While most code generation efforts are limited to code snippets, our work takes a step further by aiming to generate complete architectural components. This approach could revolutionize software development by enabling a direct transition from design decisions to deployment, bypassing traditional development phases.

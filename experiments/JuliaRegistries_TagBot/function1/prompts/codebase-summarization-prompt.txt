@@ -8,7 +8,7 @@ You are a computer scientist specializing in serverless computing (especially Fa
 
 Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/__init__.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/__init__.py
 ```python
 import os
 import sys
@@ -78,7 +78,7 @@ if _ENV != "local":
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/__init__.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/action/__init__.py
 ```python
 TAGBOT_WEB = "https://julia-tagbot.com"
 
@@ -93,7 +93,7 @@ class InvalidProject(Abort):
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/__main__.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/action/__main__.py
 ```python
 import json
 import os
@@ -199,7 +199,7 @@ except Exception as e:
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/repo.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/action/repo.py
 ```python
 import hashlib
 import json
@@ -872,7 +872,7 @@ class Repo:
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/git.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/action/git.py
 ```python
 import re
 import subprocess
@@ -1024,7 +1024,7 @@ class Git:
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/action/changelog.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/action/changelog.py
 ```python
 import json
 import re
@@ -1287,12 +1287,12 @@ class Changelog:
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/local/__init__.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/local/__init__.py
 ```python
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/local/__main__.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/local/__main__.py
 ```python
 from pathlib import Path
 
@@ -1367,7 +1367,7 @@ if __name__ == "__main__":
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/tagbot/web/__init__.py
+/home/userName/Downloads/JuliaRegistries_TagBot/tagbot/web/__init__.py
 ```python
 import json
 import os
@@ -1460,7 +1460,7 @@ def report() -> JSON:
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/test/test_tagbot.py
+/home/userName/Downloads/JuliaRegistries_TagBot/test/test_tagbot.py
 ```python
 from io import StringIO
 from logging import DEBUG, StreamHandler, getLogger
@@ -1522,7 +1522,7 @@ def test_fallback_logger():
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/test/action/test_git.py
+/home/userName/Downloads/JuliaRegistries_TagBot/test/action/test_git.py
 ```python
 from datetime import datetime
 from unittest.mock import Mock, call, patch
@@ -1681,7 +1681,7 @@ def test_time_of_commit():
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/test/action/test_changelog.py
+/home/userName/Downloads/JuliaRegistries_TagBot/test/action/test_changelog.py
 ```python
 import os.path
 import textwrap
@@ -2048,7 +2048,7 @@ def test_get():
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/test/action/test_repo.py
+/home/userName/Downloads/JuliaRegistries_TagBot/test/action/test_repo.py
 ```python
 import os
 
@@ -2762,7 +2762,7 @@ def test_tag_prefix_and_get_version_tag():
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/test/web/test_web.py
+/home/userName/Downloads/JuliaRegistries_TagBot/test/web/test_web.py
 ```python
 import json
 
@@ -2839,7 +2839,7 @@ def test_report(LAMBDA, REPORTS, client):
 
 ```
 
-/home/shrikara/Downloads/JuliaRegistries_TagBot/test/web/conftest.py
+/home/userName/Downloads/JuliaRegistries_TagBot/test/web/conftest.py
 ```python
 import pytest
 

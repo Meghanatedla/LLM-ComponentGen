@@ -22,7 +22,7 @@
     "function_generation_prompt_template_type3": "prompt-templates/function-generation-prompt-template/type3.txt",
     "function_generation_prompt_type3_save_path": "craftship_codebox-npm/function3/prompts/function-generation-prompt/type3.txt",
     
-    "chosen_function_path": "/home/shrikara/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/put.js",
+    "chosen_function_path": "/home/userName/SERC/LMM+Serverless/serverless_repos_with_test/craftship_codebox-npm/src/dist-tags/put.js",
     "chosen_function": "put.js",
     "original_function_save_path": "craftship_codebox-npm/function3/ORIGINAL-put.js",
    

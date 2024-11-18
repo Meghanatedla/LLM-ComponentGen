@@ -1,0 +1,42 @@
+{
+    "language": "language",
+
+    "summarize_codebase": true,
+    "codebase_readme_path": "RepoName/README.md",
+    "files_to_summarize_paths": "RepoName/function1/context-files-paths.txt",
+
+    "codebase_summary_prompt_template": "prompt-templates/codebase-summarization-prompt-template.txt",
+    "codebase_summary_prompt_save_path": "RepoName/function1/prompts/codebase-summarization-prompt.txt",
+    "codebase_summary_save_path": "RepoName/function1/codebase-summary.txt",
+
+    "function_description_prompt_template": "prompt-templates/function-description-prompt-template.txt",
+    "function_description_prompt_save_path": "RepoName/function1/prompts/function-description-prompt.txt",
+    "function_description_save_path": "RepoName/function1/function-description.txt",
+
+    "function_generation_prompt_template_type1": "prompt-templates/function-generation-prompt-template/type1.txt",
+    "function_generation_prompt_type1_save_path": "RepoName/function1/prompts/function-generation-prompt/type1.txt",
+    
+    "function_generation_prompt_template_type2": "prompt-templates/function-generation-prompt-template/type2.txt",
+    "function_generation_prompt_type2_save_path": "RepoName/function1/prompts/function-generation-prompt/type2.txt",
+    
+    "function_generation_prompt_template_type3": "prompt-templates/function-generation-prompt-template/type3.txt",
+    "function_generation_prompt_type3_save_path": "RepoName/function1/prompts/function-generation-prompt/type3.txt",
+    
+    "chosen_function_path": "path to actual function",
+    "chosen_function": "FuncName",
+    "original_function_save_path": "RepoName/function1/ORIGINAL-FuncName",
+    
+    "example_function_description1": "RepoName/function2/function-description.txt",
+    "example_function_code1": "RepoName/function2/ORIGINAL-get.js",
+    "example_function_description2": "RepoName/function3/function-description.txt",
+    "example_function_code2": "RepoName/function3/ORIGINAL-put.js",
+
+    "generated_function_type1_save_dir": "RepoName/function1/GENERATED/type1",
+    "generated_function_type2_save_dir": "RepoName/function1/GENERATED/type2",
+    "generated_function_type3_save_dir": "RepoName/function1/GENERATED/type3",
+
+    "run_codebleu": true,
+    "codebleu_type1_save_dir": "RepoName/function1/codebleu-results/type1",
+    "codebleu_type2_save_dir": "RepoName/function1/codebleu-results/type2",
+    "codebleu_type3_save_dir": "RepoName/function1/codebleu-results/type3"
+}

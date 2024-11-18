@@ -7,7 +7,7 @@ class ArtigenzCoder(LLMInterface):
         """
         Initialize the Artigenz model.
         """
-        self.model = Client("sudokara/Artigenz-Artigenz-Coder-DS-6.7B")
+        self.model = Client("userName/Artigenz-Artigenz-Coder-DS-6.7B")
 
     def generate(self, prompt:str, *args, **kwargs) -> str:
         """

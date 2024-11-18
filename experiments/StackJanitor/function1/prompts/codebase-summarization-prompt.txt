@@ -8,7 +8,7 @@ You are a computer scientist specializing in serverless computing (especially Fa
 
 Note that your summary must be detailed enough that a developer can start implementing a new function by solely consulting your summary and without looking at the rest of the codebase. So, if there are any practices/styles followed in the rest of the codebase you must mention it. If there is a dependency/framework used in every function you must mention it. Make sure you mention the language the codebase is in. Now that you understand these guidelines, here is the codebase, with the path name of the file (from which you will infer the language) followed by the contents of the file in triple backticks:
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/deleteCloudFormationStack.test.ts
+/home/userName/Downloads/StackJanitor/src/handlers/deleteCloudFormationStack.test.ts
 ```TS
 import { index, ValidationError } from "./deleteCloudFormationStack";
 import { logger } from "../logger";
@@ -98,7 +98,7 @@ describe("deleteCloudFormationStack", () => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/gitHook.test.ts
+/home/userName/Downloads/StackJanitor/src/handlers/gitHook.test.ts
 ```TS
 import {
   bitBucketEventHandler,
@@ -262,7 +262,7 @@ describe("bitBucketEventHandler", () => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/gitHook.ts
+/home/userName/Downloads/StackJanitor/src/handlers/gitHook.ts
 ```TS
 import { APIGatewayEvent } from "aws-lambda";
 import {
@@ -406,7 +406,7 @@ export const index = async (event: APIGatewayEvent) => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/monitorCloudFormationStack.ts
+/home/userName/Downloads/StackJanitor/src/handlers/monitorCloudFormationStack.ts
 ```TS
 import config from "../config";
 import {
@@ -558,7 +558,7 @@ export const index = async (stackJanitorStatus: StackJanitorStatus) => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/monitorCloudFormationStack.test.ts
+/home/userName/Downloads/StackJanitor/src/handlers/monitorCloudFormationStack.test.ts
 ```TS
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import {
@@ -789,7 +789,7 @@ describe("monitorCloudFormationStack", () => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/dynamoParser.ts
+/home/userName/Downloads/StackJanitor/src/handlers/dynamoParser.ts
 ```TS
 import {
   AttributeValue,
@@ -898,7 +898,7 @@ export function parseEventRecords<T>(
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/logCloudFormationStack.test.ts
+/home/userName/Downloads/StackJanitor/src/handlers/logCloudFormationStack.test.ts
 ```TS
 import {
   getTagsFromStacks,
@@ -1126,7 +1126,7 @@ describe("logCloudFormationStack", () => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/logCloudFormationStack.ts
+/home/userName/Downloads/StackJanitor/src/handlers/logCloudFormationStack.ts
 ```TS
 import {
   CloudFormationClient,
@@ -1250,7 +1250,7 @@ export const index = async (event: CloudFormationEvent) => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/handlers/deleteCloudFormationStack.ts
+/home/userName/Downloads/StackJanitor/src/handlers/deleteCloudFormationStack.ts
 ```TS
 import { DynamoDBStreamEvent } from "aws-lambda";
 import { logger } from "../logger";
@@ -1390,7 +1390,7 @@ export const index = async (event: DynamoDBStreamEvent) => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/helpers.ts
+/home/userName/Downloads/StackJanitor/src/optional-handlers/utils/helpers.ts
 ```TS
 import { Stack } from "@aws-sdk/client-cloudformation";
 
@@ -1431,7 +1431,7 @@ export const getStackName = (stack: Stack[]): string[] => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/describeAllStacks.ts
+/home/userName/Downloads/StackJanitor/src/optional-handlers/utils/describeAllStacks.ts
 ```TS
 import {
   CloudFormationClient,
@@ -1464,7 +1464,7 @@ export const describeAllStacks = async (
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/describeAllStacks.test.ts
+/home/userName/Downloads/StackJanitor/src/optional-handlers/utils/describeAllStacks.test.ts
 ```TS
 import { describeAllStacks } from "./describeAllStacks";
 
@@ -1573,7 +1573,7 @@ describe("describeAllStacks", () => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/isStackExpired.ts
+/home/userName/Downloads/StackJanitor/src/optional-handlers/utils/isStackExpired.ts
 ```TS
 import { Stack } from "@aws-sdk/client-cloudformation";
 import config from "../../config";
@@ -1607,7 +1607,7 @@ export const isStackExpired = (stack: Stack[]) => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/helpers.test.ts
+/home/userName/Downloads/StackJanitor/src/optional-handlers/utils/helpers.test.ts
 ```TS
 import { getStackName, returnStackStatus, returnStackTags } from "./helpers";
 
@@ -1763,7 +1763,7 @@ describe("getStackName", () => {
 
 ```
 
-/home/shrikara/Downloads/StackJanitor/src/optional-handlers/utils/isStackExpired.test.ts
+/home/userName/Downloads/StackJanitor/src/optional-handlers/utils/isStackExpired.test.ts
 ```TS
 import { isStackExpired } from "./isStackExpired";
 
