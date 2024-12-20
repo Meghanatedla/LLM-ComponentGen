@@ -33,104 +33,98 @@ This project explores the capabilities of Large Language Models (LLMs) to genera
 ## File Structure
 
 ```
-|_Repo1
-    |_function1
-        |_codebleu-results
-            |_type1
-                |_GPT-3_5-Turbo.txt
-                |_GPT-4.txt
-                |_DeepSeek-Coder-V2.txt
-                |_CodeQwen1_5-7B-Chat.txt
-                |_Artigenz-Coder-DS-6_7B.txt
-            |_type2
-            
-            |_type3
+|_experiments
+    |_Repo1
+        |_function1
+            |_codebleu-results
+                |_type1
+                    |_GPT-3_5-Turbo.txt
+                    |_GPT-4.txt
+                    |_DeepSeek-Coder-V2.txt
+                    |_CodeQwen1_5-7B-Chat.txt
+                    |_Artigenz-Coder-DS-6_7B.txt
+                |_type2
                 
-        |_GENERATED
-            |_type1
-                |_GPT-3_5-Turbo
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_GPT-4
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_DeepSeek-Coder-V2
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_CodeQwen1_5-7B-Chat
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_Artigenz-Coder-DS-6_7B
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
+                |_type3
+                    
+            |_GENERATED
+                |_type1
+                    |_Artigenz-Coder-DS-6_7B
+                        |_GENERATED-function1_1.js
+                    |_CodeQwen1_5-7B-Chat
+                        |_GENERATED-function1_1.js
+                    |_DeepSeek-Coder-V2
+                        |_GENERATED-function1_1.js
+                    |_GPT-3_5-Turbo
+                        |_GENERATED-function1_1.js
+                    |_GPT-4
+                        |_GENERATED-function1_1.js
 
-            |_type2
+                |_type2
 
-            |_type3
-                
-        |_prompts
-            |_function-generation-prompt
-                |_type1.txt
-                |_type2.txt
-                |_type3.txt
-            |_codebase-summarization-prompt.txt
-            |_function-description-prompt.txt
+                |_type3
+                    
+            |_prompts
+                |_function-generation-prompt
+                    |_type1.txt
+                    |_type2.txt
+                    |_type3.txt
+                |_codebase-summarization-prompt.txt
+                |_function-description-prompt.txt
 
-        |_codebase-summary.txt
-        |_config.json
-        |_context-files-paths.txt
-        |_function-description.txt
-        |_ORIGINAL-function1.js
+            |_codebase-summary.txt
+            |_config.json
+            |_context-files-paths.txt
+            |_function-description.txt
+            |_ORIGINAL-function1.js
 
-    |_function2
-    
-    |_function3
+        |_function2
+        
+        |_function3
 
-    |_README.md
+        |_README.md
 
-|_Repo2
-|_Repo3
-|_Repo4  
+    |_Repo2
+    |_Repo3
+    |_Repo4  
 
-|_prompt-templates
-    |_codebase-summarization-prompt-template
-        |_type2.txt
-    |_function-generation-prompt-template
-        |_type1.txt
-        |_type2.txt
-        |_type3.txt
-    |_function-description-prompt-template.txt
+    |_prompt-templates
+        |_function-generation-prompt-template
+            |_type1.txt
+            |_type2.txt
+            |_type3.txt
+        |_codebase-summarization-prompt-template
+        |_function-description-prompt-template.txt
 
-|_csvs
-    |_code quality metrics
-    |_consistency
-|_plots
+    |_csvs
+        |_code quality metrics
+        |_consistency
+    |_plots
+    |_test-results
 
-|_runner.ipynb
-|_code_metrics.ipynb
-|_codebleu_scores.ipynb
-|_consistency_check.ipynb
-|_visulaization.ipynb
-|_CodebleuCalculator.py
-|_CodeMetricCalculator.py
-|_HelperFunction.py
-|_CreatePrompt.py
-|_LLMInterface.py
-|_ArtigenzCoder.py
-|_Gemini.py
-|_CodeQwen.py
-|_DeepSeek-Coder-V2.py
-|_OpenAIModel.py
-|_LoacalLLM.py
-|_config_files.txt
-|_config_template.json
-|_package-lock.json
-|_package.json
+    |_runner.ipynb
+    |_code_metrics.ipynb
+    |_codebleu_scores.ipynb
+    |_consistency_check.ipynb
+    |_visulaization.ipynb
+    |_CodebleuCalculator.py
+    |_CodeMetricCalculator.py
+    |_HelperFunction.py
+    |_CreatePrompt.py
+    |_LLMInterface.py
+    |_ArtigenzCoder.py
+    |_Gemini.py
+    |_CodeQwen.py
+    |_DeepSeek-Coder-V2.py
+    |_OpenAIModel.py
+    |_LoacalLLM.py
+    |_config_files.txt
+    |_config_template.json
+    |_package-lock.json
+    |_package.json
+
+|_repository-selection
+    |_filter_dataset.ipynb
 ```
 
 ## Installation and Setup
@@ -141,25 +135,29 @@ To replicate this study, follow the steps below:
 git clone <repository-url>
 ```
 
-2. Install the required packages using the following command:
+2. Install the python dependencies using the following command:
+```bash
+pip install -r requirements.txt
+```
+
+3. Install javascript/typescript dependencies using the following command:
 ```bash
 npm install
 ```
 
-3. Within `experiments` create a directory for the repository for which functions need to be generated.
+4. Within `experiments` create a directory for the repository for which functions need to be generated.
 
-4. Create a directory for each function within the repository directory.
+5. Create a directory for each function within the repository directory.
 
-5. Create a config file for the function. Follow the format in `config_template.json`.
+6. Create a config file for the function. Follow the format in `config_template.json`.
 
-6. Get all context files for the function and store the paths in `context-files-paths.txt`.
+7. Get all context files for the function and store the paths in `context-files-paths.txt`.
 
-7. Use `runner.ipynb` to create the prompts and generate functions.
+8. Use `runner.ipynb` to create the prompts and generate functions.
 
-8. Use `code_metrics.ipynb` to calculate code metrics.
+9. Use `code_metrics.ipynb` to calculate code metrics.
 
-9. Use `codebleu_scores.ipynb` to calculate CodeBLEU scores.
-
+10. Use `codebleu_scores.ipynb` to calculate CodeBLEU scores.
 
 ## Results
 1. The results for Functional correctness throuogh testing are available in the `test-results/Processed Test results.csv` directory.

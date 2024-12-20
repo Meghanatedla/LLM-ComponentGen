@@ -1,4 +1,4 @@
-# LLMs for Generation of Architectural Components: An Exploratory Empirical Study in the Serverless World
+# Replication package for: LLMs for Generation of Architectural Components: An Exploratory Empirical Study in the Serverless World
 
 ### Authors: Shrikara Arun*, Meghana Tedla*, Karthik Vaidhyanathan (* indicates equal contribution)
 
@@ -27,8 +27,30 @@ The experiment involves generating functions and calculating their metrics acros
 1. **Repositories and Functions:**
 * A total of 4 repositories are considered.
 * From three repository, 3 functions were selected and one of them 1 function was selected, resulting in 10 functions in total.
+
+Given below is the information about the selected repositories:
+| **Repository Name** | **Language**  | **Stars** | **Forks** | **No. of Functions** | **Link to Repository** |
+|----------------------|---------------|-----------|-----------|-----------------------|---------------|
+| codebox-npm          | Javascript    | 352       | 27        | 10                    | [Link to the Repo]( https://github.com/craftship/codebox-npm/tree/master ) |
+| laconia              | Javascript    | 326       | 30        | 15                    | [Link to the Repo]( https://github.com/nearst/laconia/tree/master ) |
+| TagBot               | Python        | 91        | 18        | 2                     | [Link to the Repo]( https://github.com/JuliaRegistries/TagBot/tree/master ) |
+| StackJanitor         | Typescript    | 37        | 2         | 5                     | [Link to the Repo]( https://github.com/lendi-au/StackJanitor/tree/master ) |
+
+
 2. **Models and Prompt Types:**
 * 5 different models are used to generate code for each selected function.
+
+Given below is the information about the selected models:
+
+| **Model Name**           | **Number of Parameters** | **Context Window Size (in tokens)** | **Availability** | **License Type** |
+|---------------------------|--------------------------|-------------------------------------|------------------|------------------|
+| Artigenz-Coder-DS-6.7B   | 6.7B                    | 16,384                              | Local/API        | Open             |
+| CodeQwen1.5-7B-Chat      | 7B                      | 64K                                 | Local/API        | Open             |
+| DeepSeek-V2.5            | 236B                    | 128K                                | Local/API        | Open             |
+| GPT-3.5-Turbo            | Unknown                 | 4,096                               | API              | Proprietary      |
+| GPT-4                    | Unknown                 | 8,192                               | API              | Proprietary      |
+
+
 * Each model generates code using 3 different prompt types:
     * _Zero Shot with README (Type 1 Prompt)_
     * _Zero Shot with Codebase Summarization (Type 2 Prompt)_
@@ -49,127 +71,158 @@ The experiment involves generating functions and calculating their metrics acros
 
 ## Reproducing Results
 
-<!-- link to github and Zeneno -->
-**Link to the Artifact**: [Link to the artifact](   )
+<!-- link to Zenodo -->
+**Link to the Artifact**: 
+1. [GitHub Link to the artifact]( https://github.com/Meghanatedla/LLM-ComponentGen/tree/main )
+2. [Zenodo Link to the artifact](  )
 
-<!-- links to 4 repos -->
+**Steps to Reproduce:**
+1. Clone the repository using the following command:
+```bash
+git clone <repository-url>
+```
+
+2. Install the python dependencies using the following command:
+```bash
+pip install -r requirements.txt
+```
+
+3. Install javascript/typescript dependencies using the following command:
+```bash
+npm install
+```
+
+4. Within `experiments` create a directory for the repository for which functions need to be generated.
+
+5. Create a directory for each function within the repository directory.
+
+6. Create a config file for the function. Follow the format in `config_template.json`.
+
+7. Get all context files for the function and store the paths in `context-files-paths.txt`.
+
+8. Use `runner.ipynb` to create the prompts and generate functions.
+
+9. Use `code_metrics.ipynb` to calculate code metrics.
+
+10. Use `codebleu_scores.ipynb` to calculate CodeBLEU scores.
+
 
 ## Project Structure
 
 ```
-|_Repo1
-    |_function1
-        |_codebleu-results
-            |_type1
-                |_GPT-3_5-Turbo.txt
-                |_GPT-4.txt
-                |_DeepSeek-Coder-V2.txt
-                |_CodeQwen1_5-7B-Chat.txt
-                |_Artigenz-Coder-DS-6_7B.txt
-            |_type2
-            
-            |_type3
+|_experiments
+    |_Repo1
+        |_function1
+            |_codebleu-results
+                |_type1
+                    |_GPT-3_5-Turbo.txt
+                    |_GPT-4.txt
+                    |_DeepSeek-Coder-V2.txt
+                    |_CodeQwen1_5-7B-Chat.txt
+                    |_Artigenz-Coder-DS-6_7B.txt
+                |_type2
                 
-        |_GENERATED
-            |_type1
-                |_GPT-3_5-Turbo
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_GPT-4
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_DeepSeek-Coder-V2
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_CodeQwen1_5-7B-Chat
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
-                |_Artigenz-Coder-DS-6_7B
-                    |_GENERATED-function1_1.js
-                    |_GENERATED-function1_2.js
-                    |_GENERATED-function1_3.js
+                |_type3
+                    
+            |_GENERATED
+                |_type1
+                    |_Artigenz-Coder-DS-6_7B
+                        |_GENERATED-function1_1.js
+                    |_CodeQwen1_5-7B-Chat
+                        |_GENERATED-function1_1.js
+                    |_DeepSeek-Coder-V2
+                        |_GENERATED-function1_1.js
+                    |_GPT-3_5-Turbo
+                        |_GENERATED-function1_1.js
+                    |_GPT-4
+                        |_GENERATED-function1_1.js
 
-            |_type2
+                |_type2
 
-            |_type3
-                
-        |_prompts
-            |_function-generation-prompt
-                |_type1.txt
-                |_type2.txt
-                |_type3.txt
-            |_codebase-summarization-prompt.txt
-            |_function-description-prompt.txt
+                |_type3
+                    
+            |_prompts
+                |_function-generation-prompt
+                    |_type1.txt
+                    |_type2.txt
+                    |_type3.txt
+                |_codebase-summarization-prompt.txt
+                |_function-description-prompt.txt
 
-        |_codebase-summary.txt
-        |_config.json
-        |_context-files-paths.txt
-        |_function-description.txt
-        |_ORIGINAL-function1.js
+            |_codebase-summary.txt
+            |_config.json
+            |_context-files-paths.txt
+            |_function-description.txt
+            |_ORIGINAL-function1.js
 
-    |_function2
-    
-    |_function3
+        |_function2
+        
+        |_function3
 
-    |_README.md
+        |_README.md
 
-|_Repo2
-|_Repo3
-|_Repo4  
+    |_Repo2
+    |_Repo3
+    |_Repo4  
 
-|_prompt-templates
-    |_codebase-summarization-prompt-template
-        |_type2.txt
-    |_function-generation-prompt-template
-        |_type1.txt
-        |_type2.txt
-        |_type3.txt
-    |_function-description-prompt-template.txt
+    |_prompt-templates
+        |_function-generation-prompt-template
+            |_type1.txt
+            |_type2.txt
+            |_type3.txt
+        |_codebase-summarization-prompt-template
+        |_function-description-prompt-template.txt
 
-|_csvs
-    |_code quality metrics
-    |_consistency
-|_plots
+    |_csvs
+        |_code quality metrics
+        |_consistency
+    |_plots
+    |_test-results
 
-|_runner.ipynb
-|_code_metrics.ipynb
-|_codebleu_scores.ipynb
-|_consistency_check.ipynb
-|_visulaization.ipynb
-|_CodebleuCalculator.py
-|_CodeMetricCalculator.py
-|_HelperFunction.py
-|_CreatePrompt.py
-|_LLMInterface.py
-|_ArtigenzCoder.py
-|_Gemini.py
-|_CodeQwen.py
-|_DeepSeek-Coder-V2.py
-|_OpenAIModel.py
-|_LoacalLLM.py
-|_config_files.txt
-|_config_template.json
-|_package-lock.json
-|_package.json
+    |_runner.ipynb
+    |_code_metrics.ipynb
+    |_codebleu_scores.ipynb
+    |_consistency_check.ipynb
+    |_visulaization.ipynb
+    |_CodebleuCalculator.py
+    |_CodeMetricCalculator.py
+    |_HelperFunction.py
+    |_CreatePrompt.py
+    |_LLMInterface.py
+    |_ArtigenzCoder.py
+    |_Gemini.py
+    |_CodeQwen.py
+    |_DeepSeek-Coder-V2.py
+    |_OpenAIModel.py
+    |_LoacalLLM.py
+    |_config_files.txt
+    |_config_template.json
+    |_package-lock.json
+    |_package.json
+
+|_repository-selection
+    |_filter_dataset.ipynb
 ```
 
 ### File Descriptions
 **Notebooks:**
-* `code_metrics.ipynb`: Calculates code metrics—Lines of Code (LoC), Cyclomatic Complexity, Cognitive Complexity, and Halstead Metrics—
+* `filter_dataset.ipynb`: Filters repositories:\
+    1. Checks for the presence of tests in the repository using the keyword `test` and filters out repositories without tests.
+    2. The filtered repositories are then sorted based on the number of stars and forks.
 
-
-* `codebleu_scores.ipynb`: Computes and saves CodeBLEU scores for functions generated by 5 models using 3 prompt types, comparing each with its original counterpart.
-* `consistency_check.ipynb`: Evaluates consistency by comparing multiple generated functions for the same context using CodeBLEU. Includes a plot of Average Pairwise CodeBLEU Scores per Model.
 * `runner.ipynb`: Orchestrates the experiment workflow:
     1. Loads and validates the configuration file.
     2. Creates codebase and function description prompts.
     3. Uses Gemini to create summarizations and descriptions.
     4. Creates function generation prompts (Type 1, 2, and 3).
     5. Generates function code using 5 models across 3 prompt types.
+
+* `code_metrics.ipynb`: Calculates code metrics—Lines of Code (LoC), Cyclomatic Complexity, Cognitive Complexity, and Halstead Metrics—
+
+* `codebleu_scores.ipynb`: Computes and saves CodeBLEU scores for functions generated by 5 models using 3 prompt types, comparing each with its original counterpart.
+
+* `consistency_check.ipynb`: Evaluates consistency by comparing multiple generated functions for the same context using CodeBLEU. Includes a plot of Average Pairwise CodeBLEU Scores per Model.
+
 * `visualization.ipynb`: Generates visualizations for metrics and CodeBLEU scores, including:
     1. Code Quality Metrics for Original and Generated Functions.
     2. Average CodeBLEU Scores per Model and Prompt Type.
@@ -189,3 +242,6 @@ OpenAIModel.py: Implements LLMInterface for OpenAI's GPT-3.5-Turbo and GPT-4 mod
 * `CreatePrompt.py`: Methods to create Type 1, 2, and 3 prompts for function generation.
 * `HelperFunctions.py`: Utility functions for configuration validation, file handling, and prompt management in function generation experiments.
 
+**Configuration Files**
+* There is a configuration file for each function in the repository. The configuration file contains the fields as mentioned in the `config_template.json` file.
+* This file is used to generate functions for the corresponding function in the repository using the various models and prompt types.
