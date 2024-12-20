@@ -1,6 +1,6 @@
 # LLMs for Generation of Architectural Components: An Exploratory Empirical Study in the Serverless World
 
-### Authors: Shrikara Arun, Meghana Tedla, Karthik Vaidhyanathan
+### Authors: Shrikara Arun*, Meghana Tedla*, Karthik Vaidhyanathan (* indicates equal contribution)
 
 ## Overview
 This project investigates the capabilities of Large Language Models (LLMs) to generate architectural components, specifically focusing on Functions as a Service (FaaS), commonly referred to as serverless functions. By extending the scope of LLM-generated code from snippets to complete architectural components, this work introduces the potential to bridge design decisions directly to deployment, streamlining the software development process.
