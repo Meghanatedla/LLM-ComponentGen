@@ -31,10 +31,10 @@ The experiment involves generating functions and calculating their metrics acros
 Given below is the information about the selected repositories:
 | **Repository Name** | **Language**  | **Stars** | **Forks** | **No. of Functions** | **Link to Repository** |
 |----------------------|---------------|-----------|-----------|-----------------------|---------------|
-| codebox-npm          | Javascript    | 352       | 27        | 10                    | [Link to the Repo]( https://github.com/craftship/codebox-npm/tree/master ) |
-| laconia              | Javascript    | 326       | 30        | 15                    | [Link to the Repo]( https://github.com/nearst/laconia/tree/master ) |
-| TagBot               | Python        | 91        | 18        | 2                     | [Link to the Repo]( https://github.com/JuliaRegistries/TagBot/tree/master ) |
-| StackJanitor         | Typescript    | 37        | 2         | 5                     | [Link to the Repo]( https://github.com/lendi-au/StackJanitor/tree/master ) |
+| codebox-npm          | Javascript    | 352       | 27        | 10                    | [Link]( https://github.com/craftship/codebox-npm/tree/master ) |
+| laconia              | Javascript    | 326       | 30        | 15                    | [Link]( https://github.com/nearst/laconia/tree/master ) |
+| TagBot               | Python        | 91        | 18        | 2                     | [Link]( https://github.com/JuliaRegistries/TagBot/tree/master ) |
+| StackJanitor         | Typescript    | 37        | 2         | 5                     | [Link]( https://github.com/lendi-au/StackJanitor/tree/master ) |
 
 
 2. **Models and Prompt Types:**
