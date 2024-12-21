@@ -1,15 +1,46 @@
-# LLMs for Generation of Architectural Components: An Exploratory Empirical Study in the Serverless World
+# Replication package for: LLMs for Generation of Architectural Components: An Exploratory Empirical Study in the Serverless World
 
-This repository contains the experiments for our submission to ICSA25. 
+### Authors: Shrikara Arun*, Meghana Tedla*, Karthik Vaidhyanathan (* indicates equal contribution)
 
-This project explores the capabilities of Large Language Models (LLMs) to generate architectural components, focusing on Functions as a Service (FaaS), commonly known as serverless functions. While most code generation efforts are limited to code snippets, our work takes a step further by aiming to generate complete architectural components. This approach could revolutionize software development by enabling a direct transition from design decisions to deployment, bypassing traditional development phases.
+## Overview
+This project investigates the capabilities of Large Language Models (LLMs) to generate architectural components, specifically focusing on Functions as a Service (FaaS), commonly referred to as serverless functions. By extending the scope of LLM-generated code from snippets to complete architectural components, this work introduces the potential to bridge design decisions directly to deployment, streamlining the software development process.
 
-## Study Design 
-<div align="center">
-    <img src="images/WorkFlow Daigram.png" alt="Sample Image">
-</div>
+## Key Objectives
+This study aims to evaluate the degree to which LLMs are able to generate software architecture components. The degree here refers to both the functional correctness and quality of code. we formalize our goal to:
 
-### Selected Models for Code Generation  
+**Analyze** the effectiveness of LLMs
+
+**For the purpose of** generating software architecture compo-
+nents
+
+**With respect to** automatic software architectural component
+generation
+
+**From the viewpoint of** software architects and developers
+
+**In the context of** the Function-as-a-Service (FaaS) architec-
+tural style
+
+## Description
+The experiment involves generating functions and calculating their metrics across multiple repositories, prompt types, and models. Here's the process:
+
+1. **Repositories and Functions:**
+* A total of 4 repositories are considered.
+* From three repository, 3 functions were selected and one of them 1 function was selected, resulting in 10 functions in total.
+
+Given below is the information about the selected repositories:
+| **Repository Name** | **Language**  | **Stars** | **Forks** | **No. of Functions** | **Link to Repository** |
+|----------------------|---------------|-----------|-----------|-----------------------|---------------|
+| codebox-npm          | Javascript    | 352       | 27        | 10                    | [Link]( https://github.com/craftship/codebox-npm/tree/master ) |
+| laconia              | Javascript    | 326       | 30        | 15                    | [Link]( https://github.com/nearst/laconia/tree/master ) |
+| TagBot               | Python        | 91        | 18        | 2                     | [Link]( https://github.com/JuliaRegistries/TagBot/tree/master ) |
+| StackJanitor         | Typescript    | 37        | 2         | 5                     | [Link]( https://github.com/lendi-au/StackJanitor/tree/master ) |
+
+
+2. **Models and Prompt Types:**
+* 5 different models are used to generate code for each selected function.
+
+Given below is the information about the selected models:
 
 | **Model Name**           | **Number of Parameters** | **Context Window Size (in tokens)** | **Availability** | **License Type** |
 |---------------------------|--------------------------|-------------------------------------|------------------|------------------|
@@ -20,17 +51,36 @@ This project explores the capabilities of Large Language Models (LLMs) to genera
 | GPT-4                    | Unknown                 | 8,192                               | API              | Proprietary      |
 
 
-### Selected Repositories  
+* Each model generates code using 3 different prompt types:
+    * _Zero Shot with README (Type 1 Prompt)_
+    * _Zero Shot with Codebase Summarization (Type 2 Prompt)_
+    * _Few Shot with Codebase Summarization (Type 3 Prompt)_
 
-| **Repository Name** | **Language**  | **Stars** | **Forks** | **No. of Functions** |
-|----------------------|---------------|-----------|-----------|-----------------------|
-| codebox-npm          | Javascript    | 352       | 27        | 10                    |
-| laconia              | Javascript    | 326       | 30        | 15                    |
-| TagBot               | Python        | 91        | 18        | 2                     |
-| StackJanitor         | Typescript    | 37        | 2         | 5                     |
+<!-- write a note mentioning that for one of the function only 2 prompt types was used -->
+
+3. **Function Generation:**
+* For each function, code is generated by every model using all 3 prompt types.
+* This results in 145 generated functions: 
+
+4. **Evaluation:**
+* We perform three kinds of evaluations on the LLM generated serverless functions:
+    * _Functional Correctness Through Testing_: We evaluated both the original and generated code using the existing tests in each repository. The evaluation was conducted without and with minimal human intervention.
+    * _Code Quality through Code Metrics_: We quantify code quality using code level metrics—Lines of Code (LoC), Cyclomatic Complexity, Cognitive Complexity, Halstead Metrics.
+    * _Code Similarity using CodeBLEU_: We measure how syntactically similar LLM generated serverless functions are to human written ones through the CodeBLEU metric.
 
 
-## File Structure
+## Reproducing Results
+
+<!-- link to Zenodo -->
+**Link to the Artifact**: 
+1. [GitHub Link to the artifact]( https://github.com/Meghanatedla/LLM-ComponentGen/tree/main )
+2. [Zenodo Link to the artifact](  )
+
+**Steps to Reproduce:**
+See the `INSTALL.md` file
+
+
+## Project Structure
 
 ```
 |_experiments
@@ -127,52 +177,46 @@ This project explores the capabilities of Large Language Models (LLMs) to genera
     |_filter_dataset.ipynb
 ```
 
-## Installation and Setup
-To replicate this study, follow the steps below:
+### File Descriptions
+**Notebooks:**
+* `filter_dataset.ipynb`: Filters repositories:
+    1. Checks for the presence of tests in the repository using the keyword `test` and filters out repositories without tests.
+    2. The filtered repositories are then sorted based on the number of stars and forks.
 
-1. Clone the repository using the following command:
-```bash
-git clone <repository-url>
-```
+* `runner.ipynb`: Orchestrates the experiment workflow:
+    1. Loads and validates the configuration file.
+    2. Creates codebase and function description prompts.
+    3. Uses Gemini to create summarizations and descriptions.
+    4. Creates function generation prompts (Type 1, 2, and 3).
+    5. Generates function code using 5 models across 3 prompt types.
 
-2. Install the python dependencies using the following command:
-```bash
-pip install -r requirements.txt
-```
+* `code_metrics.ipynb`: Calculates code metrics—Lines of Code (LoC), Cyclomatic Complexity, Cognitive Complexity, and Halstead Metrics—
 
-3. Install javascript/typescript dependencies using the following command:
-```bash
-npm install
-```
+* `codebleu_scores.ipynb`: Computes and saves CodeBLEU scores for functions generated by 5 models using 3 prompt types, comparing each with its original counterpart.
 
-4. Within `experiments` create a directory for the repository for which functions need to be generated.
+* `consistency_check.ipynb`: Evaluates consistency by comparing multiple generated functions for the same context using CodeBLEU. Includes a plot of Average Pairwise CodeBLEU Scores per Model.
 
-5. Create a directory for each function within the repository directory.
+* `visualization.ipynb`: Generates visualizations for metrics and CodeBLEU scores, including:
+    1. Code Quality Metrics for Original and Generated Functions.
+    2. Average CodeBLEU Scores per Model and Prompt Type.
 
-6. Create a config file for the function. Follow the format in `config_template.json`.
+**Models**
+1. `LLMInterface.py`: Defines a common interface for loading models and generating responses.
+2. `ArtigenzCoder.py`: Implements LLMInterface for the Artigenz-Coder-DS-6.7B model via the Gradio API on Hugging Face Spaces.
+3. `CodeQwen.py`: Implements LLMInterface for the CodeQwen1.5-7B-Chat model via the Gradio API on Hugging Face Spaces.
+4. `DeepSeek.py`: Implements LLMInterface for the DeepSeek-V2.5 model using its OpenAI-compatible API.
+OpenAIModel.py: Implements LLMInterface for OpenAI's GPT-3.5-Turbo and GPT-4 models.
+5. `Gemini.py`: Implements LLMInterface for Google's Gemini-1.5-Pro model.
+6. `LocalLLM.py`: Implements LLMInterface designed to interact with the Artigenz-Coder-DS-6.7B and CodeQwen1.5-7B-Chat models hosted locally.
 
-7. Get all context files for the function and store the paths in `context-files-paths.txt`.
+**Helper Files**
+* `CodebleuCalculator.py`: Contains methods to compute CodeBLEU scores.
+* `CodeMetricCalculator.py`: Computes code metrics—LoC, Cyclomatic Complexity, Cognitive Complexity, and Halstead Metrics—for Python and JavaScript code.
+* `CreatePrompt.py`: Methods to create Type 1, 2, and 3 prompts for function generation.
+* `HelperFunctions.py`: Utility functions for configuration validation, file handling, and prompt management in function generation experiments.
 
-8. Use `runner.ipynb` to create the prompts and generate functions.
+For detailed implementation documentation, see comments in specific files. 
 
-9. Use `code_metrics.ipynb` to calculate code metrics.
-
-10. Use `codebleu_scores.ipynb` to calculate CodeBLEU scores.
-
-## Results
-1. The results for Functional correctness throuogh testing are available in the `test-results/Processed Test results.csv` directory.
-<div align="center">
-    <img src="images/Test Results.png" alt="Sample Image" width=900>
-</div>
-
-2. The results for code quality through code metrics are available in the `csvs/code quality metrics` directory.
-<div align="center">
-    <img src="experiments/plots/original_vs_generated_Code_Metrics.png" alt="Sample Image" width=1000>
-</div>
-
-3. The results for Code Similarity using CodeBLEU are available in the `csvs/code quality metrics/Codebleu.csv` directory.
-<div align="center">
-    <img src="experiments/plots/CodeBLEU Scores.png" alt="Sample Image" width=400>
-</div>
-
----
+**Configuration Files**
+* There is a configuration file for each function in the repository. The configuration file contains the fields as mentioned in the `config_template.json` file.
+* This file is used to generate functions for the corresponding function in the repository using the various models and prompt types.

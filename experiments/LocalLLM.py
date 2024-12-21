@@ -4,11 +4,11 @@ from LLMInterface import LLMInterface
 # %%
 
 #! Changing cache directories must happen BEFORE transformers is imported
-cache_dir = os.getenv("CACHE_DIR", "/scratch/serverlessllm")
-os.environ["TRANSFORMERS_CACHE"] = cache_dir
-os.environ["HF_CACHE"] = cache_dir
-os.environ["HF_HOME"] = cache_dir
-os.environ["HF_DATASETS_CACHE"] = cache_dir
+# cache_dir = os.getenv("CACHE_DIR", "/scratch/serverlessllm")
+# os.environ["TRANSFORMERS_CACHE"] = cache_dir
+# os.environ["HF_CACHE"] = cache_dir
+# os.environ["HF_HOME"] = cache_dir
+# os.environ["HF_DATASETS_CACHE"] = cache_dir
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
@@ -57,7 +57,7 @@ class LocalLLM(LLMInterface):
             self.model_name,
             torch_dtype="auto",
             device_map="auto",
-            max_memory={0: "11GB", 1: "11GB", 2: "11GB", 3: "11GB"},
+            # max_memory={0: "11GB", 1: "11GB", 2: "11GB", 3: "11GB"},
             *model_args,
             **model_kwargs
         )
