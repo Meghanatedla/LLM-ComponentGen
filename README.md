@@ -3,7 +3,7 @@
 ### Authors: Shrikara Arun*, Meghana Tedla*, Karthik Vaidhyanathan (* indicates equal contribution)
 
 ## Overview
-This project investigates the capabilities of Large Language Models (LLMs) to generate architectural components, specifically focusing on Functions as a Service (FaaS), commonly referred to as serverless functions. By extending the scope of LLM-generated code from snippets to complete architectural components, this work introduces the potential to bridge design decisions directly to deployment, streamlining the software development process.
+This project investigates the capabilities of Large Language Models (LLMs) to generate architectural components, specifically focusing on Functions as a Service (FaaS), commonly referred to as serverless functions. By extending the scope of LLM-generated code from snippets to complete architectural components, this work introduces the potential to bridge design decisions directly to deployment, streamlining the software development process. This replication package is applying for the Research Object Reviewed (ROR) ROR-Functional, ROR Reusable and Open Research Object (ORO) badges. We are not applying for Results Validated badges (Results Reproduced (ROR-R) and Results Replicated (RER)) since we do not have independent researchers for verification nor is the reproduction of all results low effort. It involves significant investment in terms of time (execution and person hours) and non-zero cost to generate the serverless functions using the LLMs.
 
 ## Key Objectives
 This study aims to evaluate the degree to which LLMs are able to generate software architecture components. The degree here refers to both the functional correctness and quality of code. we formalize our goal to:
@@ -73,8 +73,8 @@ Given below is the information about the selected models:
 
 <!-- link to Zenodo -->
 **Link to the Artifact**: 
-1. [GitHub Link to the artifact]( https://github.com/Meghanatedla/LLM-ComponentGen/tree/main )
-2. [Zenodo Link to the artifact](  )
+1. [GitHub Link to the artifact](https://github.com/Meghanatedla/LLM-ComponentGen/tree/main)
+2. [Zenodo Link to the artifact](https://doi.org/10.5281/zenodo.14539783)
 
 **Steps to Reproduce:**
 See the `INSTALL.md` file

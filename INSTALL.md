@@ -12,6 +12,10 @@ The experimental setup used consists of two steps - the repository selection pha
 > [!CAUTION]
 > Some dependencies do NOT work on Apple Silicon machines (M1/M2/M3/M4 Macs). It is recommended to use an AMD64 based Linux machine. Windows and Intel Mac compatibility is unknown, use either WSL (for Windows) or a Linux VM.
 
+**Link to the Artifact**: 
+1. [GitHub Link to the artifact](https://github.com/Meghanatedla/LLM-ComponentGen/tree/main)
+2. [Zenodo Link to the artifact](https://doi.org/10.5281/zenodo.14539783)
+
 
 ---
 

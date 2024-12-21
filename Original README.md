@@ -128,6 +128,11 @@ This project explores the capabilities of Large Language Models (LLMs) to genera
 ```
 
 ## Installation and Setup
+
+**Link to the Artifact**: 
+1. [GitHub Link to the artifact](https://github.com/Meghanatedla/LLM-ComponentGen/tree/main)
+2. [Zenodo Link to the artifact](https://doi.org/10.5281/zenodo.14539783)
+
 See `INSTALL.md` for detailed steps.
 
 At a high level, follow the steps below:
