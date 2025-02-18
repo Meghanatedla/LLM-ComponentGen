@@ -1,0 +1,5 @@
+Repository Name, Repository URL, Commit Hash, Language, Stars, Forks, Function 1, Function 2, Function 3
+codebox-npm, https://github.com/craftship/codebox-npm, fb281b8, Javascript,	352, 27, github.js, get.js, put.js
+laconia, https://github.com/nearst/laconia,	3bae180, Javascript, 326, 30, capture-card-payment.js, place-order.js, process-card-payments.js	
+TagBot, https://github.com/JuliaRegistries/TagBot, 29c35fc, Python,	91,	18, reports.py, , 
+StackJanitor, https://github.com/lendi-au/StackJanitor, 1aa4f2e, Typescript, 37, 2, searchDeleteCloudformationStack.ts, logCloudFormationStack.ts, monitorCloudFormationStack.ts
